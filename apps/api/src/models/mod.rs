@@ -1,3 +1,5 @@
+pub mod user;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -18,6 +20,7 @@ pub struct Issue {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub resolved_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,10 +66,59 @@ pub enum IssueStatus {
 pub struct CreateIssueRequest {
     pub title: String,
     pub description: String,
-    pub category: IssueCategory,
+    pub category: Option<IssueCategory>,
     pub location: GeoLocation,
     pub media_urls: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateIssueRequest {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub status: Option<IssueStatus>,
+    pub priority: Option<Priority>,
+    pub assigned_to: Option<Uuid>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueListQuery {
+    pub status: Option<IssueStatus>,
+    pub category: Option<IssueCategory>,
+    pub priority: Option<Priority>,
+    pub sort: Option<String>,
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    pub id: Uuid,
+    pub issue_id: Uuid,
+    pub author_id: Uuid,
+    pub content: String,
+    pub is_internal: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCommentRequest {
+    pub issue_id: Uuid,
+    pub author_id: Uuid,
+    pub content: String,
+    pub is_internal: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusHistoryEntry {
+    pub id: Uuid,
+    pub issue_id: Uuid,
+    pub old_status: IssueStatus,
+    pub new_status: IssueStatus,
+    pub changed_by: Uuid,
+    pub reason: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

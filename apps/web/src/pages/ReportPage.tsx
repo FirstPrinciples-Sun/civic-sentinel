@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { MapPin, Camera, Send, AlertTriangle } from 'lucide-react'
+import { MapPin, Camera, Send, AlertTriangle, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { api } from '../services/api'
 
 const reportSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters'),
@@ -23,6 +24,7 @@ export default function ReportPage() {
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors },
   } = useForm<ReportForm>({
     resolver: zodResolver(reportSchema),
@@ -51,12 +53,32 @@ export default function ReportPage() {
   const onSubmit = async (data: ReportForm) => {
     setIsSubmitting(true)
     try {
-      // TODO: Connect to actual API
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      toast.success('Issue reported successfully! Our AI is analyzing priority.')
-      setAiAnalysis(null)
-    } catch {
-      toast.error('Failed to submit. Please try again.')
+      const response = await api.post('/issues', {
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        location: {
+          latitude: data.latitude,
+          longitude: data.longitude,
+        },
+        media_urls: [],
+        tags: [],
+      })
+
+      if (response.data.success) {
+        toast.success(response.data.message ?? 'Issue reported successfully! Our AI is analyzing priority.')
+        reset()
+        setAiAnalysis(null)
+      } else {
+        toast.error(response.data.error ?? 'Failed to submit. Please try again.')
+      }
+    } catch (error) {
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { error?: string } } }
+        toast.error(axiosError.response?.data?.error ?? 'Failed to submit. Please try again.')
+      } else {
+        toast.error('Failed to submit. Please try again.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -148,7 +170,10 @@ export default function ReportPage() {
           className="w-full btn-primary flex items-center justify-center space-x-2 disabled:opacity-50"
         >
           {isSubmitting ? (
-            <span className="animate-spin">⟳</span>
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Submitting...</span>
+            </>
           ) : (
             <>
               <Send className="w-4 h-4" />

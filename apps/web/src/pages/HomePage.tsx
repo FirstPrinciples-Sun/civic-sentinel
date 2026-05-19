@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom'
-import { Shield, Zap, Users, BarChart3, ArrowRight, Activity } from 'lucide-react'
+import { Shield, Zap, Users, BarChart3, ArrowRight, Activity, Loader2 } from 'lucide-react'
+import { useAnalytics } from '../hooks/useAnalytics'
 
 export default function HomePage() {
+  const { data: analytics, isLoading: analyticsLoading } = useAnalytics()
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Hero Section */}
@@ -10,17 +13,17 @@ export default function HomePage() {
           <Activity className="w-4 h-4 text-emerald-400" />
           <span className="text-sm text-emerald-400 font-medium">Open Source</span>
         </div>
-        
+
         <h1 className="text-4xl md:text-6xl font-bold mb-6">
           <span className="gradient-text">Empowering Communities</span>
           <br />
           <span className="text-white">Through Technology</span>
         </h1>
-        
+
         <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-10">
           A simple tool for communities to report problems, track progress, and work together to make things better.
         </p>
-        
+
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link to="/report" className="btn-primary flex items-center space-x-2">
             <span>Report an Issue</span>
@@ -30,6 +33,28 @@ export default function HomePage() {
             View Dashboard
           </Link>
         </div>
+      </div>
+
+      {/* Stats Section */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16">
+        {analyticsLoading ? (
+          <>
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+          </>
+        ) : (
+          <>
+            <HomeStat label="Total Issues" value={analytics?.total_issues ?? 0} />
+            <HomeStat label="Open Issues" value={analytics?.open_issues ?? 0} />
+            <HomeStat label="Resolved" value={analytics?.resolved_issues ?? 0} />
+            <HomeStat
+              label="Impact Score"
+              value={analytics?.impact_score?.toFixed(1) ?? '0.0'}
+            />
+          </>
+        )}
       </div>
 
       {/* Features Grid */}
@@ -70,6 +95,24 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function HomeStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="glass-panel p-4 text-center">
+      <div className="text-2xl md:text-3xl font-bold gradient-text">{value}</div>
+      <div className="text-sm text-slate-400 mt-1">{label}</div>
+    </div>
+  )
+}
+
+function StatSkeleton() {
+  return (
+    <div className="glass-panel p-4 text-center animate-pulse">
+      <div className="w-16 h-8 bg-slate-700 rounded mx-auto mb-2" />
+      <div className="w-20 h-4 bg-slate-700 rounded mx-auto" />
     </div>
   )
 }
