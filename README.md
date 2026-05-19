@@ -1,167 +1,237 @@
-# 🛡️ Civic Sentinel
+# Civic Sentinel
 
-> **AI-Powered Civic Resilience Platform** — A tool for communities to report, track, and resolve public issues together.
+> An open-source platform for communities to report, track, and resolve civic issues.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
----
-
-## 🌍 About
-
-Civic Sentinel helps people in any community report problems they see around them — broken roads, safety concerns, environmental issues, and more — and ensures those reports reach the right people who can fix them.
-
-Everything is open source and free. No hidden costs. No premium tiers.
-
-### What It Does
-- 📍 **Report Issues** — Citizens report problems with photos and location
-- 🧠 **AI Assistance** — On-device analysis helps categorize and prioritize (privacy-first)
-- ⚡ **Smart Routing** — Reports go to the correct department or responder
-- 📊 **Track Progress** — Everyone can see status updates transparently
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 🏗️ Technology
+## Current Status
 
-This project is built with:
+This project is under active development. The API and frontend scaffolding are in place, along with a Docker-based deployment setup and CI/CD pipelines. The database layer, authentication, and end-to-end issue lifecycle are partially implemented but not yet wired into the UI.
 
-| Component | Technology |
-|-----------|-----------|
-| **Backend** | Rust (Axum) |
-| **Frontend** | React 18 + TypeScript + Tailwind CSS |
-| **AI (Browser)** | Rust compiled to WebAssembly |
-| **Database** | SQLite / libSQL (Turso) |
-| **Build** | Vite |
-| **Deploy** | Docker |
-
-We chose these tools because they are reliable, well-maintained, and have strong communities.
+**Last updated:** May 2026  
+**Current phase:** MVP scaffolding & core API development
 
 ---
 
-## 📦 Getting Started
+## What It Is
+
+Civic Sentinel is a web application that lets people in a community report problems they encounter — broken roads, safety concerns, utility outages, and similar issues. Reports are stored, categorized, and tracked through a resolution workflow visible to everyone.
+
+The goal is to give small communities, neighborhoods, or organizations a free, self-hosted alternative to expensive issue-management software.
+
+---
+
+## Technology
+
+| Component | Technology | Rationale |
+|-----------|-----------|-----------|
+| Backend API | Rust (Axum) | Strong type system, reliable async runtime |
+| Frontend | React 18 + TypeScript + Tailwind CSS | Widely used, good developer experience |
+| Build tool | Vite | Fast dev server, modern bundling |
+| Database | SQLite / libSQL (Turso) | Zero-config for self-hosting; optional cloud replication |
+| Containerization | Docker + Docker Compose | Single-command deployment |
+| CI/CD | GitHub Actions | Automated testing and builds |
+
+A WebAssembly analytics module (Rust → WASM) is planned for browser-side issue analysis, but is not yet integrated.
+
+---
+
+## What Works Now
+
+These parts are implemented and functional at the API or UI level:
+
+- **Project structure** — Rust workspace, React app, WASM crate, Docker setup
+- **Health check endpoint** — `GET /health` returns service status
+- **Issue model and routes** — `GET /api/v1/info`, `POST /api/v1/issues`, `GET /api/v1/issues/:id`
+- **React frontend shell** — Routing, layout, and page stubs for Home, Report, Map, and Dashboard
+- **Docker Compose setup** — Builds and runs the backend and frontend containers
+- **CI pipelines** — GitHub Actions for Rust formatting, clippy, tests, and builds
+- **Middleware scaffolding** — JWT auth, rate limiting, and security headers (not all wired to routes yet)
+- **Database schema** — SQL migrations for users, issues, comments, status history, and refresh tokens
+
+## What Is Planned Next
+
+- [ ] Wire the database into API handlers (currently returns empty/mock data)
+- [ ] Implement user registration and login (UI + API)
+- [ ] Complete issue CRUD: create, read, update status, list with filters
+- [ ] Connect the report form to the API
+- [ ] Populate the dashboard with real data
+- [ ] Add file upload for issue photos
+- [ ] Integrate the WebAssembly module for browser-side text analysis
+- [ ] Deploy a public demo instance
+
+---
+
+## MVP Scope
+
+The minimum viable product targets the following functionality:
+
+1. **Issue reporting** — A web form where anyone can submit an issue with title, description, category, and location.
+2. **Issue CRUD** — View a list of issues, open an issue detail page, and update its status.
+3. **Basic admin dashboard** — A simple view showing issue counts by status and category.
+4. **Status tracking** — Issues move through statuses: Reported → Under Review → In Progress → Resolved.
+5. **Category and priority fields** — Each issue has a category (Infrastructure, Safety, Environment, etc.) and a priority level (Low, Medium, High, Critical).
+
+Features outside the MVP scope — such as LINE integration, SMS alerts, AI spam detection, heat maps, SLA routing, public open-data API, or predictive maintenance — are noted in the roadmap but are not claimed as implemented.
+
+---
+
+## Architecture
+
+### Current MVP Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    React Frontend                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
+│  │  Home    │  │ Report   │  │  Map     │  │ Dashboard│ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘ │
+└───────┼─────────────┼─────────────┼─────────────┼───────┘
+        │             │             │             │
+        └─────────────┴─────────────┴─────────────┘
+                            │ HTTPS
+┌───────────────────────────▼──────────────────────────────┐
+│               Rust API (Axum)                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │  Issues  │  │  Health  │  │  Info    │              │
+│  │  routes  │  │  check   │  │  route   │              │
+│  └────┬─────┘  └──────────┘  └──────────┘              │
+└───────┼──────────────────────────────────────────────────┘
+        │ (planned — not yet connected)
+┌───────▼──────────────────────────────────────────────────┐
+│            SQLite / libSQL Database                       │
+│   users · issues · comments · status_history             │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Future Target Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    React Frontend                         │
+│          (PWA, multi-language, offline support)           │
+└─────────────────────────┬────────────────────────────────┘
+                          │ HTTPS / WebSocket
+┌─────────────────────────▼────────────────────────────────┐
+│               Rust API (Axum)                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │  Issues  │  │   Auth   │  │Analytics │              │
+│  │  Auth    │  │  JWT     │  │  Export  │              │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘              │
+└───────┼─────────────┼─────────────┼──────────────────────┘
+        │             │             │
+        └─────────────┴─────────────┘
+                    │
+┌───────────────────▼──────────────────────────────────────┐
+│            libSQL (Turso) — Edge Replicas                 │
+│   users · issues · comments · status_history · fts5       │
+└──────────────────────────────────────────────────────────┘
+        │
+┌───────▼──────────────────────────────────────────────────┐
+│   WebAssembly Module (Browser)                            │
+│   Text analysis · Category suggestion · Similarity        │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Start
 
 ### Prerequisites
 - [Rust](https://rustup.rs/) 1.75+
 - [Node.js](https://nodejs.org/) 20+
 - [Docker](https://docker.com/) (optional)
 
-### Quick Start
+### Run with Docker
+
 ```bash
 git clone https://github.com/FirstPrinciples-Sun/civic-sentinel.git
 cd civic-sentinel
 cp .env.example .env
-# Edit .env — set JWT_SECRET to a strong random string
+# Edit .env and set JWT_SECRET to a random string (32+ characters)
 docker-compose up
 ```
 
-Visit http://localhost:5173
+The frontend will be available at http://localhost:5173 and the API at http://localhost:3000.
 
-### Development Mode
+### Run Locally
+
+Backend:
 ```bash
-# Terminal 1 — Backend
-cd apps/api && cargo run
+cd apps/api
+cargo run
+```
 
-# Terminal 2 — Frontend
-cd apps/web && npm install && npm run dev
+Frontend:
+```bash
+cd apps/web
+npm install
+npm run dev
 ```
 
 ---
 
-## ✨ Features
+## Development
 
-### Issue Reporting
-- Report via web form with photos and location
-- Works on mobile and desktop
-- Anonymous reporting supported
+### Backend
+```bash
+cd apps/api
+cargo fmt          # Format
+cargo clippy       # Lint
+cargo test         # Test
+cargo run          # Run dev server
+```
 
-### AI Analysis (Privacy-First)
-- Runs directly in the user's browser via WebAssembly
-- No data sent to external AI services
-- Helps suggest category and urgency
+### Frontend
+```bash
+cd apps/web
+npm run lint       # Lint
+npm run typecheck  # Type check
+npm run dev        # Dev server
+npm run build      # Production build
+```
 
-### Routing & Tracking
-- Issues routed to appropriate responders
-- Status updates visible to everyone
-- Historical record of all actions
-
-### Transparency
-- Public dashboard showing all issues
-- Open data API for researchers
-- Community impact metrics
-
----
-
-## 🗺️ Roadmap
-
-### Phase 1: Foundation
-- [x] Project structure
-- [x] Basic API and frontend
-- [x] Docker setup
-- [ ] Database integration
-- [ ] User authentication
-- [ ] Full issue lifecycle
-
-### Phase 2: Intelligence
-- [ ] Browser-based AI classification
-- [ ] Duplicate detection
-- [ ] Priority suggestions
-- [ ] Real-time updates
-
-### Phase 3: Community
-- [ ] Mobile PWA
-- [ ] LINE integration (Thailand)
-- [ ] Multi-language support
-- [ ] Public API
-
-### Phase 4: Ecosystem
-- [ ] Plugin system
-- [ ] Third-party integrations
-- [ ] White-label option
+### WebAssembly (planned)
+```bash
+cd crates/wasm-analytics
+wasm-pack build --target web
+```
 
 ---
 
-## 🤝 Contributing
+## Deployment
 
-This project is built by the community, for the community. Everyone is welcome.
-
-### How to Contribute
-1. 🍴 Fork the repository
-2. 🌿 Create a branch from `develop`
-3. 💻 Make your changes
-4. 📤 Submit a Pull Request
-
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for details.
-
-### Code of Conduct
-Be respectful. Be helpful. Assume good intent.
+See [docs/deployment/SELF_HOSTING.md](docs/deployment/SELF_HOSTING.md) for options:
+- Docker Compose (local or VPS)
+- Fly.io
+- Railway
 
 ---
 
-## 📜 License
+## Contributing
 
-Dual-licensed under:
-- [MIT License](LICENSE) — use freely
-- [Apache-2.0 License](LICENSE-APACHE) — patent protection
+Contributions are welcome. Please read [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 
-**Free for everyone. Forever.**
-
----
-
-## 🙏 Thanks
-
-- The Rust, React, and open source communities
-- Everyone who reports issues, contributes code, or shares feedback
-- Communities around the world working to make things better
+Quick start for contributors:
+1. Fork the repo
+2. Create a branch from `develop`
+3. Make changes
+4. Open a pull request to `develop`
 
 ---
 
-## 🔗 Links
+## License
 
-- **GitHub**: [@FirstPrinciples-Sun](https://github.com/FirstPrinciples-Sun)
-- **Issues**: [Report a bug or request a feature](../../issues)
-- **Discussions**: [Join the conversation](../../discussions)
+[MIT License](LICENSE)
+
+Free to use, modify, and distribute. No attribution required, though it is appreciated.
 
 ---
 
-> *"Small actions, multiplied by many people, transform communities."*
+## Contact
 
-**Built with care by FirstPrinciples-Sun and contributors.**
+- **Issues & bugs:** [GitHub Issues](../../issues)
+- **Questions & ideas:** [GitHub Discussions](../../discussions)
+- **Maintainer:** [@FirstPrinciples-Sun](https://github.com/FirstPrinciples-Sun)
