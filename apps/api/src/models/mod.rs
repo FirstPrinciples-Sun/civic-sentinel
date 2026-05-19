@@ -2,6 +2,7 @@ pub mod user;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,13 +43,69 @@ pub enum IssueCategory {
     Other,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+impl IssueCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssueCategory::Infrastructure => "infrastructure",
+            IssueCategory::Safety => "safety",
+            IssueCategory::Environment => "environment",
+            IssueCategory::Sanitation => "sanitation",
+            IssueCategory::Transportation => "transportation",
+            IssueCategory::PublicUtility => "publicutility",
+            IssueCategory::Other => "other",
+        }
+    }
+}
+
+impl FromStr for IssueCategory {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "infrastructure" => Ok(IssueCategory::Infrastructure),
+            "safety" => Ok(IssueCategory::Safety),
+            "environment" => Ok(IssueCategory::Environment),
+            "sanitation" => Ok(IssueCategory::Sanitation),
+            "transportation" => Ok(IssueCategory::Transportation),
+            "publicutility" => Ok(IssueCategory::PublicUtility),
+            "other" => Ok(IssueCategory::Other),
+            _ => Err(format!("Unknown issue category: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Ord, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Priority {
     Low = 1,
     Medium = 2,
     High = 3,
     Critical = 4,
+}
+
+impl Priority {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Priority::Low => "low",
+            Priority::Medium => "medium",
+            Priority::High => "high",
+            Priority::Critical => "critical",
+        }
+    }
+}
+
+impl FromStr for Priority {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "low" => Ok(Priority::Low),
+            "medium" => Ok(Priority::Medium),
+            "high" => Ok(Priority::High),
+            "critical" => Ok(Priority::Critical),
+            _ => Err(format!("Unknown priority: {}", s)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,6 +117,35 @@ pub enum IssueStatus {
     Resolved,
     Closed,
     Escalated,
+}
+
+impl IssueStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssueStatus::Reported => "reported",
+            IssueStatus::UnderReview => "underreview",
+            IssueStatus::InProgress => "inprogress",
+            IssueStatus::Resolved => "resolved",
+            IssueStatus::Closed => "closed",
+            IssueStatus::Escalated => "escalated",
+        }
+    }
+}
+
+impl FromStr for IssueStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "reported" => Ok(IssueStatus::Reported),
+            "underreview" => Ok(IssueStatus::UnderReview),
+            "inprogress" => Ok(IssueStatus::InProgress),
+            "resolved" => Ok(IssueStatus::Resolved),
+            "closed" => Ok(IssueStatus::Closed),
+            "escalated" => Ok(IssueStatus::Escalated),
+            _ => Err(format!("Unknown issue status: {}", s)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
