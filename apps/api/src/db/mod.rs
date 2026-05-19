@@ -15,7 +15,7 @@ pub struct Database {
 
 impl Database {
     /// Initialize database connection
-    pub async fn new(config: &AppConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(config: &AppConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let db_path = &config.database.url;
         
         let db = if db_path.starts_with("http://") || db_path.starts_with("https://") {
@@ -40,7 +40,7 @@ impl Database {
     }
 
     /// Run database migrations
-    pub async fn migrate(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn migrate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         
         // Create users table
@@ -159,7 +159,7 @@ impl Database {
     }
 
     /// Insert a new issue (16 params max to satisfy libsql IntoParams tuple limit)
-    pub async fn insert_issue(&self, issue: &Issue) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn insert_issue(&self, issue: &Issue) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "INSERT INTO issues (id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at)
@@ -187,7 +187,7 @@ impl Database {
     }
 
     /// Fetch an issue by ID
-    pub async fn get_issue(&self, id: Uuid) -> Result<Option<Issue>, Box<dyn std::error::Error>> {
+    pub async fn get_issue(&self, id: Uuid) -> Result<Option<Issue>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
             "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at, deleted_at
@@ -203,7 +203,7 @@ impl Database {
     }
 
     /// Update an issue using current values as defaults for unchanged fields
-    pub async fn update_issue(&self, id: Uuid, updates: &UpdateIssueRequest, current: &Issue) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update_issue(&self, id: Uuid, updates: &UpdateIssueRequest, current: &Issue) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let title = updates.title.as_ref().unwrap_or(&current.title);
         let description = updates.description.as_ref().unwrap_or(&current.description);
@@ -227,7 +227,7 @@ impl Database {
     }
 
     /// Soft delete an issue
-    pub async fn delete_issue(&self, id: Uuid) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn delete_issue(&self, id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "UPDATE issues SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3 AND deleted_at IS NULL",
@@ -241,7 +241,7 @@ impl Database {
     }
 
     /// List issues with optional filters (applied in-memory for flexibility)
-    pub async fn list_issues(&self, query: &IssueListQuery) -> Result<(Vec<Issue>, i64), Box<dyn std::error::Error>> {
+    pub async fn list_issues(&self, query: &IssueListQuery) -> Result<(Vec<Issue>, i64), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
             "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at, deleted_at
@@ -282,7 +282,7 @@ impl Database {
     }
 
     /// Insert a comment
-    pub async fn insert_comment(&self, comment: &Comment) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn insert_comment(&self, comment: &Comment) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "INSERT INTO issue_comments (id, issue_id, author_id, content, is_internal, created_at)
@@ -300,7 +300,7 @@ impl Database {
     }
 
     /// Get comments for an issue
-    pub async fn get_comments(&self, issue_id: Uuid) -> Result<Vec<Comment>, Box<dyn std::error::Error>> {
+    pub async fn get_comments(&self, issue_id: Uuid) -> Result<Vec<Comment>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
             "SELECT id, issue_id, author_id, content, is_internal, created_at
@@ -316,7 +316,7 @@ impl Database {
     }
 
     /// Insert a status history entry
-    pub async fn insert_status_history(&self, entry: &StatusHistoryEntry) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn insert_status_history(&self, entry: &StatusHistoryEntry) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "INSERT INTO issue_status_history (id, issue_id, old_status, new_status, changed_by, reason, created_at)
@@ -335,7 +335,7 @@ impl Database {
     }
 
     /// Get status history for an issue
-    pub async fn get_status_history(&self, issue_id: Uuid) -> Result<Vec<StatusHistoryEntry>, Box<dyn std::error::Error>> {
+    pub async fn get_status_history(&self, issue_id: Uuid) -> Result<Vec<StatusHistoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
             "SELECT id, issue_id, old_status, new_status, changed_by, reason, created_at
@@ -350,7 +350,7 @@ impl Database {
         Ok(history)
     }
 
-    fn row_to_issue(&self, row: &libsql::Row) -> Result<Issue, Box<dyn std::error::Error>> {
+    fn row_to_issue(&self, row: &libsql::Row) -> Result<Issue, Box<dyn std::error::Error + Send + Sync>> {
         Ok(Issue {
             id: row.get::<String>(0)?.parse()?,
             title: row.get::<String>(1)?,
@@ -374,7 +374,7 @@ impl Database {
         })
     }
 
-    fn row_to_comment(&self, row: &libsql::Row) -> Result<Comment, Box<dyn std::error::Error>> {
+    fn row_to_comment(&self, row: &libsql::Row) -> Result<Comment, Box<dyn std::error::Error + Send + Sync>> {
         Ok(Comment {
             id: row.get::<String>(0)?.parse()?,
             issue_id: row.get::<String>(1)?.parse()?,
@@ -385,7 +385,7 @@ impl Database {
         })
     }
 
-    fn row_to_status_history(&self, row: &libsql::Row) -> Result<StatusHistoryEntry, Box<dyn std::error::Error>> {
+    fn row_to_status_history(&self, row: &libsql::Row) -> Result<StatusHistoryEntry, Box<dyn std::error::Error + Send + Sync>> {
         Ok(StatusHistoryEntry {
             id: row.get::<String>(0)?.parse()?,
             issue_id: row.get::<String>(1)?.parse()?,
@@ -398,7 +398,7 @@ impl Database {
     }
 
     /// Get analytics summary
-    pub async fn get_analytics_summary(&self) -> Result<AnalyticsSummary, Box<dyn std::error::Error>> {
+    pub async fn get_analytics_summary(&self) -> Result<AnalyticsSummary, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
 
         // Total issues

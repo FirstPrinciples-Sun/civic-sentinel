@@ -1,7 +1,7 @@
 use axum::{
     extract::Json,
     http::StatusCode,
-    routing::{get, patch, post},
+    routing::{get},
     Router,
 };
 use serde::Serialize;
@@ -105,12 +105,30 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/info", get(api_info))
+        // Auth routes (pending AuthState -> AppState alignment)
+        // .route("/api/v1/auth/register", post(routes::auth::register))
+        // .route("/api/v1/auth/login", post(routes::auth::login))
+        // .route("/api/v1/auth/refresh", post(routes::auth::refresh))
+        // .route("/api/v1/auth/logout", post(routes::auth::logout))
         // Issue routes
         .route(
             "/api/v1/issues",
             get(routes::issues::list_issues).post(routes::issues::create_issue),
         )
-        .route("/api/v1/issues/:id", get(routes::issues::get_issue))
+        .route(
+            "/api/v1/issues/:id",
+            get(routes::issues::get_issue)
+                .patch(routes::issues::update_issue)
+                .delete(routes::issues::delete_issue),
+        )
+        .route(
+            "/api/v1/issues/:id/comments",
+            get(routes::comments::get_comments).post(routes::comments::create_comment),
+        )
+        .route(
+            "/api/v1/issues/:id/history",
+            get(routes::status_history::get_status_history),
+        )
         // Analytics
         .route("/api/v1/analytics", get(routes::analytics::get_analytics))
         .with_state(state);
