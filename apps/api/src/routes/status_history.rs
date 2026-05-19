@@ -1,7 +1,6 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Json, Path, State},
     http::StatusCode,
-    response::Json,
 };
 use serde_json::{json, Value};
 use uuid::Uuid;

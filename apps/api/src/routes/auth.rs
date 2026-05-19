@@ -1,7 +1,6 @@
 use axum::{
-    extract::State,
+    extract::{Json, State},
     http::StatusCode,
-    response::Json,
 };
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};

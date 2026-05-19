@@ -1,7 +1,7 @@
 use axum::{
+    extract::Json,
     http::StatusCode,
-    response::Json,
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
 use serde::Serialize;
@@ -120,6 +120,4 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
-}
-
 }
