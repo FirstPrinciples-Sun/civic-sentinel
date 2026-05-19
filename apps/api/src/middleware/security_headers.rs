@@ -1,4 +1,5 @@
 use axum::{
+    body::Body,
     http::{header, Request, StatusCode},
     middleware::Next,
     response::Response,
@@ -7,7 +8,7 @@ use axum::{
 /// Security headers middleware
 /// Adds essential security headers to all responses
 pub async fn security_headers_middleware(
-    request: Request,
+    request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let mut response = next.run(request).await;

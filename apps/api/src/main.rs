@@ -6,6 +6,7 @@ use axum::{
 };
 use serde::Serialize;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tracing::info;
 
 mod config;
@@ -14,6 +15,13 @@ mod middleware;
 mod models;
 mod routes;
 mod services;
+
+/// Application state shared across handlers
+#[derive(Clone)]
+pub struct AppState {
+    pub db: db::Database,
+    pub config: Arc<config::AppConfig>,
+}
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -62,16 +70,56 @@ async fn main() {
 
     info!("Starting Civic Sentinel API...");
 
+    // Load configuration
+    let app_config = match config::AppConfig::load() {
+        Ok(cfg) => Arc::new(cfg),
+        Err(e) => {
+            tracing::warn!("Failed to load config file ({}), using defaults", e);
+            Arc::new(config::AppConfig::default())
+        }
+    };
+
+    // Initialize database
+    let database = match db::Database::new(&app_config).await {
+        Ok(db) => {
+            info!("Database connected successfully");
+            if let Err(e) = db.migrate().await {
+                tracing::error!("Database migration failed: {}", e);
+                std::process::exit(1);
+            }
+            info!("Database migrations completed");
+            db
+        }
+        Err(e) => {
+            tracing::error!("Database connection failed: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let state = AppState {
+        db: database,
+        config: app_config,
+    };
+
+    // Build router
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/info", get(api_info))
-        .route("/api/v1/issues", get(routes::issues::list_issues).post(routes::issues::create_issue))
+        // Issue routes
+        .route(
+            "/api/v1/issues",
+            get(routes::issues::list_issues).post(routes::issues::create_issue),
+        )
         .route("/api/v1/issues/:id", get(routes::issues::get_issue))
-        .route("/api/v1/analytics", get(routes::analytics::get_analytics));
+        // Analytics
+        .route("/api/v1/analytics", get(routes::analytics::get_analytics))
+        .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("API server listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
 }
