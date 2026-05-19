@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Shield, Zap, Users, BarChart3, ArrowRight, Activity, Loader2 } from 'lucide-react'
+import { Shield, Zap, Users, BarChart3, ArrowRight, Activity } from 'lucide-react'
 import { useAnalytics } from '../hooks/useAnalytics'
 
 export default function HomePage() {
