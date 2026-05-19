@@ -1,79 +1,59 @@
 # 🛡️ Civic Sentinel
 
-> **AI-Powered Civic Resilience Platform** — Empowering communities to detect, prioritize, and resolve public issues through crowdsourced intelligence and automated response coordination.
+> **AI-Powered Civic Resilience Platform** — A tool for communities to report, track, and resolve public issues together.
 
-[![Rust CI](https://github.com/FirstPrinciples-Sun/civic-sentinel/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/FirstPrinciples-Sun/civic-sentinel/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
-[![React Version](https://img.shields.io/badge/react-18%2B-blue.svg)](https://react.dev)
 
 ---
 
-## 🌍 Mission
+## 🌍 About
 
-**Every community deserves to be heard. Every issue deserves a response.**
+Civic Sentinel helps people in any community report problems they see around them — broken roads, safety concerns, environmental issues, and more — and ensures those reports reach the right people who can fix them.
 
-Civic Sentinel bridges the gap between citizens and responders by:
-- 🔍 **Detecting** community issues in real-time through crowdsourced reports
-- 🧠 **Analyzing** urgency and impact using on-device AI (WebAssembly)
-- ⚡ **Routing** issues to the right responders automatically
-- 📊 **Tracking** resolution progress with transparent metrics
-- 🤝 **Coordinating** multi-agency responses seamlessly
+Everything is open source and free. No hidden costs. No premium tiers.
 
----
-
-## 🚀 Tech Stack
-
-### Backend — `apps/api/`
-| Technology | Purpose |
-|-----------|---------|
-| **Rust** | Systems programming language with zero-cost abstractions |
-| **Axum** | Async web framework (Tokio ecosystem) — handles 100K+ concurrent connections |
-| **libSQL (Turso)** | Distributed SQLite — edge-ready, zero-config database |
-| **Tokio** | Async runtime — the engine behind Axum |
-| **Serde** | Serialization framework |
-| **Tower** | Middleware, timeouts, rate limiting |
-
-### Frontend — `apps/web/`
-| Technology | Purpose |
-|-----------|---------|
-| **React 18** | Concurrent rendering, Suspense |
-| **TypeScript** | Type-safe JavaScript |
-| **Vite** | Next-gen build tool (100x faster than CRA) |
-| **Tailwind CSS** | Utility-first CSS |
-| **React Query** | Server state management |
-| **Zustand** | Client state management |
-
-### WebAssembly — `crates/wasm-analytics/`
-| Technology | Purpose |
-|-----------|---------|
-| **Rust → WASM** | Browser-native ML inference |
-| **candle** | Minimalist ML framework in Rust |
-| **wasm-bindgen** | Rust/JavaScript interop |
-| **web-sys** | Web API bindings |
-
-### Infrastructure
-| Technology | Purpose |
-|-----------|---------|
-| **Docker** | Containerization |
-| **GitHub Actions** | CI/CD |
-| **Fly.io / Railway** | Edge deployment |
+### What It Does
+- 📍 **Report Issues** — Citizens report problems with photos and location
+- 🧠 **AI Assistance** — On-device analysis helps categorize and prioritize (privacy-first)
+- ⚡ **Smart Routing** — Reports go to the correct department or responder
+- 📊 **Track Progress** — Everyone can see status updates transparently
 
 ---
 
-## 📦 Quick Start
+## 🏗️ Technology
+
+This project is built with:
+
+| Component | Technology |
+|-----------|-----------|
+| **Backend** | Rust (Axum) |
+| **Frontend** | React 18 + TypeScript + Tailwind CSS |
+| **AI (Browser)** | Rust compiled to WebAssembly |
+| **Database** | SQLite / libSQL (Turso) |
+| **Build** | Vite |
+| **Deploy** | Docker |
+
+We chose these tools because they are reliable, well-maintained, and have strong communities.
+
+---
+
+## 📦 Getting Started
 
 ### Prerequisites
 - [Rust](https://rustup.rs/) 1.75+
 - [Node.js](https://nodejs.org/) 20+
 - [Docker](https://docker.com/) (optional)
 
-### One-Command Setup
+### Quick Start
 ```bash
 git clone https://github.com/FirstPrinciples-Sun/civic-sentinel.git
 cd civic-sentinel
+cp .env.example .env
+# Edit .env — set JWT_SECRET to a strong random string
 docker-compose up
 ```
+
+Visit http://localhost:5173
 
 ### Development Mode
 ```bash
@@ -82,176 +62,99 @@ cd apps/api && cargo run
 
 # Terminal 2 — Frontend
 cd apps/web && npm install && npm run dev
-
-# Terminal 3 — WASM (optional)
-cd crates/wasm-analytics && wasm-pack build --target web
-```
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      CLIENT LAYER                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │   React Web  │  │  Mobile PWA  │  │  Admin Dashboard │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
-└────────────────────┬────────────────────────────────────────┘
-                     │ HTTPS / WebSocket
-┌────────────────────▼────────────────────────────────────────┐
-│                    API GATEWAY                               │
-│         Rust (Axum) — 100K+ concurrent                       │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │   REST API  │  │ WebSocket    │  │   Rate Limiter   │   │
-│  └─────────────┘  └──────────────┘  └──────────────────┘   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                   SERVICE LAYER                              │
-│  ┌──────────────┐ ┌─────────────┐ ┌──────────────────────┐ │
-│  │ Issue Service│ │ AI Service  │ │ Notification Service │ │
-│  └──────────────┘ └─────────────┘ └──────────────────────┘ │
-│  ┌──────────────┐ ┌─────────────┐ ┌──────────────────────┐ │
-│  │ User Service │ │ Map Service │ │ Analytics Service    │ │
-│  └──────────────┘ └─────────────┘ └──────────────────────┘ │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                   DATA LAYER                                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  libSQL (Turso) — Distributed SQLite at the Edge     │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│              AI / WASM LAYER (Browser)                       │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Rust → WebAssembly — On-device issue classification │  │
-│  │  candle ML — Privacy-preserving local inference      │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## ✨ Features
 
-### 🎯 Issue Detection
-- **Multi-channel reporting**: Web, PWA, LINE, SMS
-- **Media attachments**: Photos, videos, geolocation
-- **Real-time validation**: AI-powered spam detection
-- **Anonymous reporting**: Protect whistleblowers
+### Issue Reporting
+- Report via web form with photos and location
+- Works on mobile and desktop
+- Anonymous reporting supported
 
-### 🧠 AI Prioritization
-- **Urgency scoring**: AI ranks issues by severity
-- **Category classification**: Auto-tag (infrastructure, safety, environment)
-- **Duplicate detection**: Merge similar reports
-- **Trend analysis**: Predict emerging issues
+### AI Analysis (Privacy-First)
+- Runs directly in the user's browser via WebAssembly
+- No data sent to external AI services
+- Helps suggest category and urgency
 
-### ⚡ Smart Routing
-- **Responder matching**: Route to correct department
-- **SLA tracking**: Monitor response times
-- **Escalation chains**: Auto-escalate overdue issues
-- **Resource optimization**: Balance workload
+### Routing & Tracking
+- Issues routed to appropriate responders
+- Status updates visible to everyone
+- Historical record of all actions
 
-### 📊 Transparency Dashboard
-- **Public status page**: Track all issues
-- **Impact metrics**: Issues resolved, response times
-- **Heat maps**: Visualize problem areas
-- **Open data API**: Raw data for researchers
+### Transparency
+- Public dashboard showing all issues
+- Open data API for researchers
+- Community impact metrics
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1: Foundation (Now)
-- [x] Project scaffolding
-- [x] Core API (Rust + Axum)
-- [x] Basic React frontend
-- [ ] Issue CRUD operations
+### Phase 1: Foundation
+- [x] Project structure
+- [x] Basic API and frontend
+- [x] Docker setup
+- [ ] Database integration
 - [ ] User authentication
-- [ ] Database schema
+- [ ] Full issue lifecycle
 
-### Phase 2: Intelligence (Month 2)
-- [ ] WASM analytics module
-- [ ] AI categorization engine
-- [ ] Priority scoring algorithm
+### Phase 2: Intelligence
+- [ ] Browser-based AI classification
 - [ ] Duplicate detection
-- [ ] Real-time notifications
+- [ ] Priority suggestions
+- [ ] Real-time updates
 
-### Phase 3: Scale (Month 3)
-- [ ] Multi-tenant support
+### Phase 3: Community
 - [ ] Mobile PWA
-- [ ] LINE integration
-- [ ] Offline-first architecture
+- [ ] LINE integration (Thailand)
+- [ ] Multi-language support
 - [ ] Public API
 
-### Phase 4: Ecosystem (Month 4+)
+### Phase 4: Ecosystem
 - [ ] Plugin system
 - [ ] Third-party integrations
-- [ ] Community marketplace
-- [ ] White-label solution
-- [ ] Internationalization
+- [ ] White-label option
 
 ---
 
 ## 🤝 Contributing
 
-We believe **civic tech should be built by the community, for the community**.
+This project is built by the community, for the community. Everyone is welcome.
 
 ### How to Contribute
 1. 🍴 Fork the repository
-2. 🌿 Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. 💻 Write code with tests
-4. 📤 Push to your fork (`git push origin feature/amazing-feature`)
-5. 📬 Open a Pull Request
+2. 🌿 Create a branch from `develop`
+3. 💻 Make your changes
+4. 📤 Submit a Pull Request
 
-### Development Setup
-```bash
-# Install Rust components
-rustup component add rustfmt clippy
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for details.
 
-# Install Node dependencies
-cd apps/web && npm install
-
-# Run tests
-cargo test --workspace
-npm run test
-
-# Format code
-cargo fmt
-npm run lint
-```
-
-### Code Standards
-- **Rust**: Follow `cargo clippy` and `rustfmt`
-- **TypeScript**: Follow ESLint config
-- **Commits**: Use [Conventional Commits](https://www.conventionalcommits.org/)
-- **Documentation**: Every public API must be documented
+### Code of Conduct
+Be respectful. Be helpful. Assume good intent.
 
 ---
 
 ## 📜 License
 
-This project is dual-licensed under:
-- [MIT License](LICENSE) — for maximum flexibility
-- [Apache-2.0 License](LICENSE-APACHE) — for patent protection
+Dual-licensed under:
+- [MIT License](LICENSE) — use freely
+- [Apache-2.0 License](LICENSE-APACHE) — patent protection
 
-**We believe civic technology should be free and open for everyone.**
-
----
-
-## 🙏 Acknowledgments
-
-- [Tokio](https://tokio.rs/) team for the amazing async ecosystem
-- [Turso](https://turso.tech/) for edge-ready SQLite
-- [candle](https://github.com/huggingface/candle) for Rust ML
-- Every contributor who believes in open civic technology
+**Free for everyone. Forever.**
 
 ---
 
-## 🔗 Connect
+## 🙏 Thanks
+
+- The Rust, React, and open source communities
+- Everyone who reports issues, contributes code, or shares feedback
+- Communities around the world working to make things better
+
+---
+
+## 🔗 Links
 
 - **GitHub**: [@FirstPrinciples-Sun](https://github.com/FirstPrinciples-Sun)
 - **Issues**: [Report a bug or request a feature](../../issues)
@@ -259,6 +162,6 @@ This project is dual-licensed under:
 
 ---
 
-> *"The best way to predict the future is to build it — together."*
+> *"Small actions, multiplied by many people, transform communities."*
 
-**Built with ❤️ by FirstPrinciples-Sun and the open source community.**
+**Built with care by FirstPrinciples-Sun and contributors.**

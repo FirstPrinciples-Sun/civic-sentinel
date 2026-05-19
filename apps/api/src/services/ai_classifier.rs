@@ -1,6 +1,6 @@
-/// AI-powered issue classification service
-/// Uses on-device inference via WASM for privacy
-/// Falls back to server-side Rust ML (candle) when needed
+/// Issue classification service
+/// Uses simple keyword matching for categorization
+/// WebAssembly module provides browser-side analysis
 
 use crate::models::{Issue, IssueCategory, Priority};
 
@@ -26,7 +26,7 @@ impl AIClassifier {
         }
     }
 
-    /// Score urgency based on keywords and context
+    /// Score urgency based on keywords
     pub fn score_priority(title: &str, description: &str) -> Priority {
         let text = format!("{} {}", title, description).to_lowercase();
         let critical_keywords = ["emergency", "urgent", "dangerous", "life-threatening", "fire", "flood"];
@@ -44,7 +44,7 @@ impl AIClassifier {
     }
 
     /// Detect duplicate issues based on location proximity and similarity
-    pub fn detect_duplicate(new_issue: &Issue, existing_issues: &[Issue]) -> Option<Uuid> {
+    pub fn detect_duplicate(new_issue: &Issue, existing_issues: &[Issue]) -> Option<uuid::Uuid> {
         for existing in existing_issues {
             let distance = Self::haversine_distance(
                 new_issue.location.latitude,
@@ -74,7 +74,6 @@ impl AIClassifier {
     }
 
     fn text_similarity(a: &str, b: &str) -> f64 {
-        // Simplified Jaccard similarity
         let a_words: std::collections::HashSet<String> = a.to_lowercase()
             .split_whitespace()
             .map(|s| s.to_string())

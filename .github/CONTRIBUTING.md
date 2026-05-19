@@ -1,80 +1,50 @@
-# Contributing to Civic Sentinel
+# Contributing
 
-First off, thank you for considering contributing to Civic Sentinel! 🎉
+Thank you for considering contributing to Civic Sentinel.
 
-## How Can I Contribute?
+## How to Contribute
 
 ### Reporting Bugs
 - Use the [Bug Report template](../../issues/new?template=bug_report.md)
 - Include steps to reproduce
-- Include your environment details
+- Include environment details
 
 ### Suggesting Features
 - Use the [Feature Request template](../../issues/new?template=feature_request.md)
 - Explain the community impact
-- Be specific about the use case
 
 ### Pull Requests
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
+2. Create a branch from `develop`
 3. Make your changes
 4. Add tests
-5. Run the test suite
-6. Commit with clear messages
-7. Push to your fork
-8. Open a Pull Request
+5. Submit a PR
 
 ## Development Setup
 
-### Prerequisites
-- Rust 1.75+
-- Node.js 20+
-- Docker (optional)
-
-### Backend
 ```bash
+# Rust
 cd apps/api
 cargo build
 cargo test
-```
 
-### Frontend
-```bash
+# Frontend
 cd apps/web
 npm install
 npm run dev
-```
 
-### WASM
-```bash
+# WASM
 cd crates/wasm-analytics
 wasm-pack build --target web
 ```
 
 ## Code Style
 
-### Rust
-- Follow `cargo fmt` formatting
-- Address all `cargo clippy` warnings
-- Write documentation for public APIs
-- Add tests for new features
-
-### TypeScript/React
-- Use ESLint configuration
-- Write unit tests for utilities
-- Document complex components
-
-## Commit Messages
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation changes
-- `refactor:` Code refactoring
-- `test:` Adding tests
-- `chore:` Maintenance tasks
+- Rust: `cargo fmt` and `cargo clippy`
+- TypeScript: Follow ESLint config
+- Commits: Use [Conventional Commits](https://www.conventionalcommits.org/)
 
 ## Questions?
-- Open a [Discussion](../../discussions)
-- Email: rtchanaphon@gmail.com
 
-Thank you for making Civic Sentinel better! 🛡️
+- [Discussions](../../discussions)
+- Email: rtchanaphon@gmail.com

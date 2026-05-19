@@ -1,26 +1,24 @@
 # Civic Sentinel Architecture
 
 ## Overview
-Civic Sentinel is a modern civic tech platform built on a **Rust + React + WebAssembly** stack, designed for high performance, privacy, and scalability.
+Civic Sentinel is a civic issue reporting and tracking platform. This document explains how the system is organized.
 
-## System Architecture
+## System Components
 
 ```
 ┌────────────────────────────────────────────────────────────┐
 │                     CLIENT LAYER                            │
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  │
 │  │  React Web   │  │  Mobile PWA  │  │  Admin Portal   │  │
-│  │  (Vite+TS)   │  │  (Tauri/RN)  │  │  (React)        │  │
 │  └──────┬───────┘  └──────┬───────┘  └────────┬────────┘  │
 └─────────┼─────────────────┼───────────────────┼───────────┘
           │                 │                   │
           └─────────────────┴───────────────────┘
-                            │ HTTPS/WSS
+                            │ HTTPS
 ┌───────────────────────────▼────────────────────────────────┐
-│                   API GATEWAY (Rust/Axum)                   │
+│                   API (Rust/Axum)                           │
 │  ┌────────────┐  ┌────────────┐  ┌─────────────────────┐  │
 │  │ REST API   │  │ WebSocket  │  │ Rate Limiter        │  │
-│  │            │  │ Real-time  │  │ (Tower)             │  │
 │  └────────────┘  └────────────┘  └─────────────────────┘  │
 └───────────────────────────┬────────────────────────────────┘
                             │
@@ -28,76 +26,80 @@ Civic Sentinel is a modern civic tech platform built on a **Rust + React + WebAs
 │                   SERVICE LAYER                             │
 │  ┌──────────────┐ ┌─────────────┐ ┌─────────────────────┐ │
 │  │Issue Service │ │AI Service   │ │Notification Service │ │
-│  │CRUD + Search │ │Classification│ │Email/SMS/LINE       │ │
-│  └──────────────┘ └─────────────┘ └─────────────────────┘ │
-│  ┌──────────────┐ ┌─────────────┐ ┌─────────────────────┐ │
-│  │User Service  │ │Map Service  │ │Analytics Service    │ │
-│  │Auth + Profile│ │Geo queries  │ │Dashboard data       │ │
 │  └──────────────┘ └─────────────┘ └─────────────────────┘ │
 └───────────────────────────┬────────────────────────────────┘
                             │
 ┌───────────────────────────▼────────────────────────────────┐
 │                   DATA LAYER                                │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  libSQL (Turso) — Distributed SQLite at the Edge    │   │
-│  │  • Issues table                                     │   │
-│  │  • Users table                                      │   │
-│  │  • Analytics views                                  │   │
-│  │  • Geo-indexed queries                              │   │
+│  │  SQLite / libSQL (Turso)                            │   │
 │  └─────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────┘
 ```
 
-## Key Design Decisions
+## Backend (Rust)
 
-### 1. Rust Backend (Axum)
-- **Why**: Memory safety, performance (handles 100K+ concurrent connections), modern async
-- **Trade-off**: Steeper learning curve, but eliminates entire classes of bugs
+Built with:
+- **Axum** — Async web framework
+- **Tokio** — Async runtime
+- **libSQL** — Database connectivity
 
-### 2. WebAssembly Analytics
-- **Why**: Privacy-preserving ML — user data never leaves their device
-- **Use case**: Real-time issue classification, duplicate detection
-- **Trade-off**: Limited to browser capabilities, but zero latency
+Handles:
+- HTTP API requests
+- WebSocket connections for real-time updates
+- Rate limiting per IP
+- JWT authentication
+- Input validation
 
-### 3. libSQL (Turso)
-- **Why**: Edge-ready SQLite — zero config, instant replicas, incredibly fast
-- **Trade-off**: Not for massive scale (use PostgreSQL when you hit millions of users)
+## Frontend (React)
 
-### 4. React 18 + Vite
-- **Why**: Concurrent rendering, Suspense, fastest build tooling
-- **Pattern**: Server state (React Query) + Client state (Zustand)
+Built with:
+- **React 18** — UI framework
+- **TypeScript** — Type safety
+- **Tailwind CSS** — Styling
+- **Vite** — Build tool
 
-## Data Flow
+Pages:
+- Home — Overview and navigation
+- Report — Submit new issues
+- Map — View issues on a map
+- Dashboard — Analytics and status
 
-### Issue Reporting Flow
-```
-User → React Form → Validation (Zod) → POST /api/v1/issues
-  → Rust API → AI Classification → libSQL INSERT
-  → WebSocket Broadcast → Real-time Map Update
-```
+## WebAssembly Module
 
-### AI Analysis Flow
-```
-User types → WASM Module (browser) → Text Analysis
-  → Priority Score → Category Detection → UI Update
-  → If submitted → Rust API validates → Database
-```
+A Rust module compiled to WebAssembly that runs in the browser:
+- Analyzes issue text locally (no server round-trip)
+- Suggests category and priority
+- Detects similar issues
+- Keeps user data private
 
-## Security Model
-- **Authentication**: JWT with Argon2 password hashing
-- **Authorization**: Role-based (Reporter, Responder, Admin)
-- **Data**: PII encrypted at rest
-- **API**: Rate limiting, input validation, CORS
-- **WASM**: Runs in browser sandbox, no network access
+## Database
 
-## Scalability Path
-1. **Current**: Single server + SQLite (handles 1K users)
-2. **Phase 2**: Horizontal scaling + Turso replicas (handles 10K users)
-3. **Phase 3**: PostgreSQL + Redis cache (handles 100K users)
-4. **Phase 4**: Microservices + Kubernetes (handles 1M+ users)
+Uses SQLite by default (simple, zero-config). For production:
+- **libSQL (Turso)** — Distributed SQLite with replication
 
-## Performance Targets
-- API response: <50ms p99
-- WASM analysis: <10ms
-- Page load: <2s (3G)
-- Time to interactive: <3s
+Tables:
+- `users` — Accounts and roles
+- `issues` — Issue reports
+- `issue_comments` — Discussion threads
+- `issue_status_history` — Status change log
+- `refresh_tokens` — Session management
+
+## Security
+
+- Passwords hashed with Argon2
+- JWT tokens for authentication
+- Rate limiting on all endpoints
+- Security headers on all responses
+- CORS configured per environment
+- Input validation with Zod (frontend) and validator (backend)
+
+## Deployment
+
+Simple options:
+1. **Docker Compose** — One command, everything runs
+2. **Fly.io** — Cloud hosting with free tier
+3. **Railway** — Easy cloud deployment
+4. **VPS** — Any Linux server
+
+See [deployment docs](deployment/SELF_HOSTING.md) for details.
