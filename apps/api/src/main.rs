@@ -1,7 +1,7 @@
 use axum::{
     extract::Json,
     http::StatusCode,
-    routing::{get},
+    routing::{get, post},
     Router,
 };
 use serde::Serialize;
@@ -105,11 +105,11 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/info", get(api_info))
-        // Auth routes (pending AuthState -> AppState alignment)
-        // .route("/api/v1/auth/register", post(routes::auth::register))
-        // .route("/api/v1/auth/login", post(routes::auth::login))
-        // .route("/api/v1/auth/refresh", post(routes::auth::refresh))
-        // .route("/api/v1/auth/logout", post(routes::auth::logout))
+        // Auth routes
+        .route("/api/v1/auth/register", post(routes::auth::register))
+        .route("/api/v1/auth/login", post(routes::auth::login))
+        .route("/api/v1/auth/refresh", post(routes::auth::refresh))
+        .route("/api/v1/auth/logout", post(routes::auth::logout))
         // Issue routes
         .route(
             "/api/v1/issues",

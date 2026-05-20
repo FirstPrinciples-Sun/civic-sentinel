@@ -10,18 +10,10 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::{
-    db::Database,
     middleware::auth::{Claims, UserRole},
     models::user::{AuthResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, UserResponse},
+    AppState,
 };
-
-#[derive(Clone)]
-pub struct AuthState {
-    pub db: std::sync::Arc<Database>,
-    pub jwt_secret: String,
-    pub jwt_expiration_hours: i64,
-    pub refresh_token_expiration_days: i64,
-}
 
 fn generate_refresh_token() -> String {
     let mut rng = rand::thread_rng();
@@ -79,7 +71,7 @@ fn parse_role(role_str: &str) -> UserRole {
 }
 
 pub async fn register(
-    State(state): State<AuthState>,
+    State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
     if let Err(errors) = payload.validate() {
@@ -171,8 +163,8 @@ pub async fn register(
         user_id,
         &payload.email,
         &UserRole::Reporter,
-        &state.jwt_secret,
-        state.jwt_expiration_hours,
+        &state.config.auth.jwt_secret,
+        state.config.auth.jwt_expiration_hours,
     )
     .map_err(|e| {
         (
@@ -185,7 +177,7 @@ pub async fn register(
     })?;
 
     let refresh_token = generate_refresh_token();
-    let refresh_expires = now + Duration::days(state.refresh_token_expiration_days);
+    let refresh_expires = now + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     conn.execute(
         "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -212,7 +204,7 @@ pub async fn register(
         access_token,
         refresh_token,
         token_type: "Bearer".to_string(),
-        expires_in: state.jwt_expiration_hours * 3600,
+        expires_in: state.config.auth.jwt_expiration_hours * 3600,
         user: UserResponse {
             id: user_id,
             email: payload.email,
@@ -223,7 +215,7 @@ pub async fn register(
 }
 
 pub async fn login(
-    State(state): State<AuthState>,
+    State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
     if let Err(errors) = payload.validate() {
@@ -332,8 +324,8 @@ pub async fn login(
         user_uuid,
         &email,
         &role,
-        &state.jwt_secret,
-        state.jwt_expiration_hours,
+        &state.config.auth.jwt_secret,
+        state.config.auth.jwt_expiration_hours,
     )
     .map_err(|e| {
         (
@@ -346,7 +338,7 @@ pub async fn login(
     })?;
 
     let refresh_token = generate_refresh_token();
-    let refresh_expires = Utc::now() + Duration::days(state.refresh_token_expiration_days);
+    let refresh_expires = Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     conn.execute(
         "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -373,7 +365,7 @@ pub async fn login(
         access_token,
         refresh_token,
         token_type: "Bearer".to_string(),
-        expires_in: state.jwt_expiration_hours * 3600,
+        expires_in: state.config.auth.jwt_expiration_hours * 3600,
         user: UserResponse {
             id: user_uuid,
             email,
@@ -384,7 +376,7 @@ pub async fn login(
 }
 
 pub async fn refresh(
-    State(state): State<AuthState>,
+    State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
     let conn = state.db.conn().await;
@@ -553,8 +545,8 @@ pub async fn refresh(
         user_uuid,
         &email,
         &role,
-        &state.jwt_secret,
-        state.jwt_expiration_hours,
+        &state.config.auth.jwt_secret,
+        state.config.auth.jwt_expiration_hours,
     )
     .map_err(|e| {
         (
@@ -567,7 +559,7 @@ pub async fn refresh(
     })?;
 
     let new_refresh_token = generate_refresh_token();
-    let refresh_expires = Utc::now() + Duration::days(state.refresh_token_expiration_days);
+    let refresh_expires = Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     // Revoke old token and insert new one
     conn.execute(
@@ -610,7 +602,7 @@ pub async fn refresh(
         access_token,
         refresh_token: new_refresh_token,
         token_type: "Bearer".to_string(),
-        expires_in: state.jwt_expiration_hours * 3600,
+        expires_in: state.config.auth.jwt_expiration_hours * 3600,
         user: UserResponse {
             id: user_uuid,
             email,
@@ -621,7 +613,7 @@ pub async fn refresh(
 }
 
 pub async fn logout(
-    State(state): State<AuthState>,
+    State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let conn = state.db.conn().await;
