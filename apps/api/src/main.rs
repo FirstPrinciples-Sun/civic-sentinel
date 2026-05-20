@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::duplicate_mod)]
+
 use axum::{
     extract::Json,
     http::StatusCode,
@@ -105,12 +107,12 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/info", get(api_info))
-        // Auth routes
+        // Auth routes (public)
         .route("/api/v1/auth/register", post(routes::auth::register))
         .route("/api/v1/auth/login", post(routes::auth::login))
         .route("/api/v1/auth/refresh", post(routes::auth::refresh))
         .route("/api/v1/auth/logout", post(routes::auth::logout))
-        // Issue routes
+        // Protected routes
         .route(
             "/api/v1/issues",
             get(routes::issues::list_issues).post(routes::issues::create_issue),
@@ -131,6 +133,13 @@ async fn main() {
         )
         // Analytics
         .route("/api/v1/analytics", get(routes::analytics::get_analytics))
+        .layer(axum::middleware::from_fn(
+            middleware::security_headers::security_headers_middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::rate_limit::rate_limit_middleware,
+        ))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

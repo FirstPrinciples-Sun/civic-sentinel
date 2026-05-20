@@ -17,23 +17,29 @@ pub async fn list_issues(
         Ok((issues, total)) => {
             let page = query.page.unwrap_or(1);
             let limit = query.limit.unwrap_or(20);
-            (StatusCode::OK, Json(json!({
-                "success": true,
-                "data": issues,
-                "meta": {
-                    "total": total,
-                    "page": page,
-                    "per_page": limit,
-                    "total_pages": (total as f64 / limit as f64).ceil() as u32
-                }
-            })))
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "data": issues,
+                    "meta": {
+                        "total": total,
+                        "page": page,
+                        "per_page": limit,
+                        "total_pages": (total as f64 / limit as f64).ceil() as u32
+                    }
+                })),
+            )
         }
         Err(e) => {
             tracing::error!("Failed to list issues: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to retrieve issues"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to retrieve issues"
+                })),
+            )
         }
     }
 }
@@ -42,9 +48,9 @@ pub async fn create_issue(
     State(state): State<AppState>,
     Json(payload): Json<CreateIssueRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let category = payload.category.unwrap_or_else(|| {
-        AIClassifier::classify_category(&payload.title, &payload.description)
-    });
+    let category = payload
+        .category
+        .unwrap_or_else(|| AIClassifier::classify_category(&payload.title, &payload.description));
     let priority = AIClassifier::score_priority(&payload.title, &payload.description);
 
     let issue = Issue {
@@ -66,19 +72,23 @@ pub async fn create_issue(
     };
 
     match state.db.insert_issue(&issue).await {
-        Ok(_) => {
-            (StatusCode::CREATED, Json(json!({
+        Ok(_) => (
+            StatusCode::CREATED,
+            Json(json!({
                 "success": true,
                 "data": issue,
                 "message": "Issue reported successfully."
-            })))
-        }
+            })),
+        ),
         Err(e) => {
             tracing::error!("Failed to create issue: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to create issue"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to create issue"
+                })),
+            )
         }
     }
 }
@@ -88,25 +98,30 @@ pub async fn get_issue(
     Path(id): Path<Uuid>,
 ) -> (StatusCode, Json<Value>) {
     match state.db.get_issue(id).await {
-        Ok(Some(issue)) => {
-            (StatusCode::OK, Json(json!({
+        Ok(Some(issue)) => (
+            StatusCode::OK,
+            Json(json!({
                 "success": true,
                 "data": issue
-            })))
-        }
-        Ok(None) => {
-            (StatusCode::NOT_FOUND, Json(json!({
+            })),
+        ),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
                 "success": false,
                 "error": "Issue not found",
                 "id": id
-            })))
-        }
+            })),
+        ),
         Err(e) => {
             tracing::error!("Failed to get issue: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to retrieve issue"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to retrieve issue"
+                })),
+            )
         }
     }
 }
@@ -120,18 +135,24 @@ pub async fn update_issue(
     let current = match state.db.get_issue(id).await {
         Ok(Some(issue)) => issue,
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(json!({
-                "success": false,
-                "error": "Issue not found",
-                "id": id
-            })));
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "error": "Issue not found",
+                    "id": id
+                })),
+            );
         }
         Err(e) => {
             tracing::error!("Failed to fetch issue for update: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to retrieve issue"
-            })));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to retrieve issue"
+                })),
+            );
         }
     };
 
@@ -140,10 +161,13 @@ pub async fn update_issue(
         let old_status = &current.status;
         if old_status != new_status {
             if !is_valid_status_transition(old_status, new_status, payload.reason.as_deref()) {
-                return (StatusCode::BAD_REQUEST, Json(json!({
-                    "success": false,
-                    "error": format!("Invalid status transition from {:?} to {:?}. A reason is required.", old_status, new_status)
-                })));
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "success": false,
+                        "error": format!("Invalid status transition from {:?} to {:?}. A reason is required.", old_status, new_status)
+                    })),
+                );
             }
 
             // Log status change history
@@ -167,27 +191,32 @@ pub async fn update_issue(
         Ok(_) => {
             // Fetch updated issue
             match state.db.get_issue(id).await {
-                Ok(Some(issue)) => {
-                    (StatusCode::OK, Json(json!({
+                Ok(Some(issue)) => (
+                    StatusCode::OK,
+                    Json(json!({
                         "success": true,
                         "data": issue,
                         "message": "Issue updated successfully"
-                    })))
-                }
-                _ => {
-                    (StatusCode::OK, Json(json!({
+                    })),
+                ),
+                _ => (
+                    StatusCode::OK,
+                    Json(json!({
                         "success": true,
                         "message": "Issue updated successfully"
-                    })))
-                }
+                    })),
+                ),
             }
         }
         Err(e) => {
             tracing::error!("Failed to update issue: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to update issue"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to update issue"
+                })),
+            )
         }
     }
 }
@@ -199,35 +228,45 @@ pub async fn delete_issue(
     match state.db.get_issue(id).await {
         Ok(Some(_)) => {}
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(json!({
-                "success": false,
-                "error": "Issue not found",
-                "id": id
-            })));
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "error": "Issue not found",
+                    "id": id
+                })),
+            );
         }
         Err(e) => {
             tracing::error!("Failed to fetch issue for delete: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to retrieve issue"
-            })));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to retrieve issue"
+                })),
+            );
         }
     }
 
     match state.db.delete_issue(id).await {
-        Ok(_) => {
-            (StatusCode::OK, Json(json!({
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
                 "success": true,
                 "message": "Issue deleted successfully",
                 "id": id
-            })))
-        }
+            })),
+        ),
         Err(e) => {
             tracing::error!("Failed to delete issue: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to delete issue"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to delete issue"
+                })),
+            )
         }
     }
 }

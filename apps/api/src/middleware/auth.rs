@@ -5,19 +5,17 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
-use crate::config::AppConfig;
+use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,        // User ID
-    pub email: String,      // User email
-    pub role: UserRole,     // User role
-    pub iat: i64,           // Issued at
-    pub exp: i64,           // Expiration
+    pub sub: String,    // User ID
+    pub email: String,  // User email
+    pub role: UserRole, // User role
+    pub iat: i64,       // Issued at
+    pub exp: i64,       // Expiration
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -32,7 +30,7 @@ pub enum UserRole {
 /// Authentication middleware
 /// Extracts JWT from Authorization header and validates it
 pub async fn auth_middleware(
-    State(config): State<Arc<AppConfig>>,
+    State(state): State<AppState>,
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
@@ -48,7 +46,7 @@ pub async fn auth_middleware(
     };
 
     let validation = Validation::new(Algorithm::HS256);
-    let decoding_key = DecodingKey::from_secret(config.jwt_secret().as_bytes());
+    let decoding_key = DecodingKey::from_secret(state.config.auth.jwt_secret.as_bytes());
 
     let claims = match decode::<Claims>(token, &decoding_key, &validation) {
         Ok(token_data) => token_data.claims,

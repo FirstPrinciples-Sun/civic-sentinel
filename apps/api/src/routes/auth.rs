@@ -11,7 +11,9 @@ use validator::Validate;
 
 use crate::{
     middleware::auth::{Claims, UserRole},
-    models::user::{AuthResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, UserResponse},
+    models::user::{
+        AuthResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, UserResponse,
+    },
     AppState,
 };
 
@@ -89,7 +91,10 @@ pub async fn register(
 
     // Check if user already exists
     let mut rows = conn
-        .query("SELECT id FROM users WHERE email = ?", [payload.email.clone()])
+        .query(
+            "SELECT id FROM users WHERE email = ?",
+            [payload.email.clone()],
+        )
         .await
         .map_err(|e| {
             (
@@ -338,7 +343,8 @@ pub async fn login(
     })?;
 
     let refresh_token = generate_refresh_token();
-    let refresh_expires = Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
+    let refresh_expires =
+        Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     conn.execute(
         "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -559,7 +565,8 @@ pub async fn refresh(
     })?;
 
     let new_refresh_token = generate_refresh_token();
-    let refresh_expires = Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
+    let refresh_expires =
+        Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     // Revoke old token and insert new one
     conn.execute(

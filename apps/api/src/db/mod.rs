@@ -17,15 +17,13 @@ impl Database {
     /// Initialize database connection
     pub async fn new(config: &AppConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let db_path = &config.database.url;
-        
+
         let db = if db_path.starts_with("http://") || db_path.starts_with("https://") {
             // Remote Turso database
             let token = std::env::var("TURSO_AUTH_TOKEN")
                 .map_err(|_| "TURSO_AUTH_TOKEN not set for remote database")?;
-            
-            Builder::new_remote(db_path.clone(), token)
-                .build()
-                .await?
+
+            Builder::new_remote(db_path.clone(), token).build().await?
         } else {
             // Local SQLite database
             let path = db_path.trim_start_matches("sqlite://");
@@ -33,7 +31,7 @@ impl Database {
         };
 
         let conn = db.connect()?;
-        
+
         Ok(Self {
             client: Arc::new(Mutex::new(conn)),
         })
@@ -42,7 +40,7 @@ impl Database {
     /// Run database migrations
     pub async fn migrate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
-        
+
         // Create users table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS users (
@@ -58,7 +56,8 @@ impl Database {
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )",
             (),
-        ).await?;
+        )
+        .await?;
 
         // Create issues table
         conn.execute(
@@ -86,7 +85,8 @@ impl Database {
                 FOREIGN KEY (assigned_to) REFERENCES users(id)
             )",
             (),
-        ).await?;
+        )
+        .await?;
 
         // Create comments table
         conn.execute(
@@ -101,7 +101,8 @@ impl Database {
                 FOREIGN KEY (author_id) REFERENCES users(id)
             )",
             (),
-        ).await?;
+        )
+        .await?;
 
         // Create status history table
         conn.execute(
@@ -117,7 +118,8 @@ impl Database {
                 FOREIGN KEY (changed_by) REFERENCES users(id)
             )",
             (),
-        ).await?;
+        )
+        .await?;
 
         // Create refresh tokens table
         conn.execute(
@@ -131,14 +133,35 @@ impl Database {
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )",
             (),
-        ).await?;
+        )
+        .await?;
 
         // Create indexes
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status)", ()).await?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_category ON issues(category)", ()).await?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_location ON issues(latitude, longitude)", ()).await?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_created ON issues(created_at)", ()).await?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)", ()).await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_category ON issues(category)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_location ON issues(latitude, longitude)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_created ON issues(created_at)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+            (),
+        )
+        .await?;
 
         // Create FTS (Full Text Search) virtual table
         conn.execute(
@@ -148,7 +171,8 @@ impl Database {
                 content_rowid='rowid'
             )",
             (),
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
@@ -159,7 +183,10 @@ impl Database {
     }
 
     /// Insert a new issue (16 params max to satisfy libsql IntoParams tuple limit)
-    pub async fn insert_issue(&self, issue: &Issue) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn insert_issue(
+        &self,
+        issue: &Issue,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "INSERT INTO issues (id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at)
@@ -187,7 +214,10 @@ impl Database {
     }
 
     /// Fetch an issue by ID
-    pub async fn get_issue(&self, id: Uuid) -> Result<Option<Issue>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_issue(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<Issue>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
             "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at, deleted_at
@@ -203,13 +233,21 @@ impl Database {
     }
 
     /// Update an issue using current values as defaults for unchanged fields
-    pub async fn update_issue(&self, id: Uuid, updates: &UpdateIssueRequest, current: &Issue) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn update_issue(
+        &self,
+        id: Uuid,
+        updates: &UpdateIssueRequest,
+        current: &Issue,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let title = updates.title.as_ref().unwrap_or(&current.title);
         let description = updates.description.as_ref().unwrap_or(&current.description);
         let status = updates.status.as_ref().unwrap_or(&current.status);
         let priority = updates.priority.as_ref().unwrap_or(&current.priority);
-        let assigned_to = updates.assigned_to.as_ref().or(current.assigned_to.as_ref());
+        let assigned_to = updates
+            .assigned_to
+            .as_ref()
+            .or(current.assigned_to.as_ref());
 
         conn.execute(
             "UPDATE issues SET title = ?1, description = ?2, status = ?3, priority = ?4, assigned_to = ?5, updated_at = ?6 WHERE id = ?7 AND deleted_at IS NULL",
@@ -227,7 +265,10 @@ impl Database {
     }
 
     /// Soft delete an issue
-    pub async fn delete_issue(&self, id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn delete_issue(
+        &self,
+        id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "UPDATE issues SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3 AND deleted_at IS NULL",
@@ -241,7 +282,10 @@ impl Database {
     }
 
     /// List issues with optional filters (applied in-memory for flexibility)
-    pub async fn list_issues(&self, query: &IssueListQuery) -> Result<(Vec<Issue>, i64), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn list_issues(
+        &self,
+        query: &IssueListQuery,
+    ) -> Result<(Vec<Issue>, i64), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
             "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at, deleted_at
@@ -267,14 +311,14 @@ impl Database {
 
         // Sort
         match query.sort.as_deref() {
-            Some("updated_at") => issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at)),
-            Some("priority") => issues.sort_by(|a, b| b.priority.cmp(&a.priority)),
+            Some("updated_at") => issues.sort_by_key(|b| std::cmp::Reverse(b.updated_at)),
+            Some("priority") => issues.sort_by_key(|b| std::cmp::Reverse(b.priority.clone())),
             _ => {} // Already sorted by created_at DESC from query
         }
 
         let total = issues.len() as i64;
         let page = query.page.unwrap_or(1).max(1) as usize;
-        let limit = query.limit.unwrap_or(20).max(1).min(100) as usize;
+        let limit = query.limit.unwrap_or(20).clamp(1, 100) as usize;
         let offset = (page - 1) * limit;
 
         let paginated: Vec<Issue> = issues.into_iter().skip(offset).take(limit).collect();
@@ -282,7 +326,10 @@ impl Database {
     }
 
     /// Insert a comment
-    pub async fn insert_comment(&self, comment: &Comment) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn insert_comment(
+        &self,
+        comment: &Comment,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "INSERT INTO issue_comments (id, issue_id, author_id, content, is_internal, created_at)
@@ -295,18 +342,24 @@ impl Database {
                 if comment.is_internal { "1" } else { "0" },
                 comment.created_at.to_rfc3339(),
             ),
-        ).await?;
+        )
+        .await?;
         Ok(())
     }
 
     /// Get comments for an issue
-    pub async fn get_comments(&self, issue_id: Uuid) -> Result<Vec<Comment>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_comments(
+        &self,
+        issue_id: Uuid,
+    ) -> Result<Vec<Comment>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
-        let mut rows = conn.query(
-            "SELECT id, issue_id, author_id, content, is_internal, created_at
+        let mut rows = conn
+            .query(
+                "SELECT id, issue_id, author_id, content, is_internal, created_at
              FROM issue_comments WHERE issue_id = ?1 ORDER BY created_at DESC",
-            [issue_id.to_string()],
-        ).await?;
+                [issue_id.to_string()],
+            )
+            .await?;
 
         let mut comments = vec![];
         while let Some(row) = rows.next().await? {
@@ -316,7 +369,10 @@ impl Database {
     }
 
     /// Insert a status history entry
-    pub async fn insert_status_history(&self, entry: &StatusHistoryEntry) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn insert_status_history(
+        &self,
+        entry: &StatusHistoryEntry,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         conn.execute(
             "INSERT INTO issue_status_history (id, issue_id, old_status, new_status, changed_by, reason, created_at)
@@ -327,7 +383,7 @@ impl Database {
                 entry.old_status.as_str(),
                 entry.new_status.as_str(),
                 entry.changed_by.to_string(),
-                entry.reason.as_ref().map(|s| s.as_str()),
+                entry.reason.as_deref(),
                 entry.created_at.to_rfc3339(),
             ),
         ).await?;
@@ -335,13 +391,18 @@ impl Database {
     }
 
     /// Get status history for an issue
-    pub async fn get_status_history(&self, issue_id: Uuid) -> Result<Vec<StatusHistoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_status_history(
+        &self,
+        issue_id: Uuid,
+    ) -> Result<Vec<StatusHistoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
-        let mut rows = conn.query(
-            "SELECT id, issue_id, old_status, new_status, changed_by, reason, created_at
+        let mut rows = conn
+            .query(
+                "SELECT id, issue_id, old_status, new_status, changed_by, reason, created_at
              FROM issue_status_history WHERE issue_id = ?1 ORDER BY created_at DESC",
-            [issue_id.to_string()],
-        ).await?;
+                [issue_id.to_string()],
+            )
+            .await?;
 
         let mut history = vec![];
         while let Some(row) = rows.next().await? {
@@ -350,7 +411,10 @@ impl Database {
         Ok(history)
     }
 
-    fn row_to_issue(&self, row: &libsql::Row) -> Result<Issue, Box<dyn std::error::Error + Send + Sync>> {
+    fn row_to_issue(
+        &self,
+        row: &libsql::Row,
+    ) -> Result<Issue, Box<dyn std::error::Error + Send + Sync>> {
         Ok(Issue {
             id: row.get::<String>(0)?.parse()?,
             title: row.get::<String>(1)?,
@@ -363,18 +427,33 @@ impl Database {
                 longitude: row.get::<f64>(7)?,
                 address: row.get::<Option<String>>(8)?,
             },
-            reporter_id: row.get::<Option<String>>(9)?.map(|s| s.parse()).transpose()?,
-            assigned_to: row.get::<Option<String>>(10)?.map(|s| s.parse()).transpose()?,
+            reporter_id: row
+                .get::<Option<String>>(9)?
+                .map(|s| s.parse())
+                .transpose()?,
+            assigned_to: row
+                .get::<Option<String>>(10)?
+                .map(|s| s.parse())
+                .transpose()?,
             media_urls: serde_json::from_str(&row.get::<String>(11)?)?,
             tags: serde_json::from_str(&row.get::<String>(12)?)?,
             created_at: row.get::<String>(13)?.parse::<DateTime<Utc>>()?,
             updated_at: row.get::<String>(14)?.parse::<DateTime<Utc>>()?,
-            resolved_at: row.get::<Option<String>>(15)?.map(|s| s.parse()).transpose()?,
-            deleted_at: row.get::<Option<String>>(16)?.map(|s| s.parse()).transpose()?,
+            resolved_at: row
+                .get::<Option<String>>(15)?
+                .map(|s| s.parse())
+                .transpose()?,
+            deleted_at: row
+                .get::<Option<String>>(16)?
+                .map(|s| s.parse())
+                .transpose()?,
         })
     }
 
-    fn row_to_comment(&self, row: &libsql::Row) -> Result<Comment, Box<dyn std::error::Error + Send + Sync>> {
+    fn row_to_comment(
+        &self,
+        row: &libsql::Row,
+    ) -> Result<Comment, Box<dyn std::error::Error + Send + Sync>> {
         Ok(Comment {
             id: row.get::<String>(0)?.parse()?,
             issue_id: row.get::<String>(1)?.parse()?,
@@ -385,7 +464,10 @@ impl Database {
         })
     }
 
-    fn row_to_status_history(&self, row: &libsql::Row) -> Result<StatusHistoryEntry, Box<dyn std::error::Error + Send + Sync>> {
+    fn row_to_status_history(
+        &self,
+        row: &libsql::Row,
+    ) -> Result<StatusHistoryEntry, Box<dyn std::error::Error + Send + Sync>> {
         Ok(StatusHistoryEntry {
             id: row.get::<String>(0)?.parse()?,
             issue_id: row.get::<String>(1)?.parse()?,
@@ -398,26 +480,39 @@ impl Database {
     }
 
     /// Get analytics summary
-    pub async fn get_analytics_summary(&self) -> Result<AnalyticsSummary, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_analytics_summary(
+        &self,
+    ) -> Result<AnalyticsSummary, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
 
         // Total issues
-        let mut total_rows = conn.query("SELECT COUNT(*) as total FROM issues WHERE deleted_at IS NULL", ()).await?;
+        let mut total_rows = conn
+            .query(
+                "SELECT COUNT(*) as total FROM issues WHERE deleted_at IS NULL",
+                (),
+            )
+            .await?;
         let total_issues: i64 = if let Some(row) = total_rows.next().await? {
             row.get::<i64>(0)?
-        } else { 0 };
+        } else {
+            0
+        };
 
         // Resolved issues
         let mut resolved_rows = conn.query("SELECT COUNT(*) as count FROM issues WHERE status = 'resolved' AND deleted_at IS NULL", ()).await?;
         let resolved_issues: i64 = if let Some(row) = resolved_rows.next().await? {
             row.get::<i64>(0)?
-        } else { 0 };
+        } else {
+            0
+        };
 
         // Closed issues
         let mut closed_rows = conn.query("SELECT COUNT(*) as count FROM issues WHERE status = 'closed' AND deleted_at IS NULL", ()).await?;
         let closed_issues: i64 = if let Some(row) = closed_rows.next().await? {
             row.get::<i64>(0)?
-        } else { 0 };
+        } else {
+            0
+        };
 
         let open_issues = total_issues - resolved_issues - closed_issues;
 
@@ -429,7 +524,9 @@ impl Database {
         ).await?;
         let avg_resolution_hours: f64 = if let Some(row) = avg_rows.next().await? {
             row.get::<Option<f64>>(0)?.unwrap_or(0.0)
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         // By category
         let mut cat_rows = conn.query(

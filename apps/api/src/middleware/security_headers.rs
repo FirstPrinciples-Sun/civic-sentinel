@@ -49,9 +49,7 @@ pub async fn security_headers_middleware(
     // Permissions Policy
     headers.insert(
         header::HeaderName::from_static("permissions-policy"),
-        header::HeaderValue::from_static(
-            "geolocation=(self), camera=(self), microphone=(self)"
-        ),
+        header::HeaderValue::from_static("geolocation=(self), camera=(self), microphone=(self)"),
     );
 
     // Strict Transport Security (HTTPS only)
