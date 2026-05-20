@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ConnectInfo, Request, State},
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::Response,
@@ -73,12 +73,16 @@ impl RateLimiter {
 
 /// Rate limiting middleware
 pub async fn rate_limit_middleware(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let key = addr.ip().to_string();
+    let key = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("127.0.0.1")
+        .to_string();
     let limiter = RateLimiter::new(state.config.clone());
 
     if !limiter.is_allowed(&key).await {

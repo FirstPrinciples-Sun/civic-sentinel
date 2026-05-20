@@ -59,3 +59,8 @@ coverage/
 # Rust workspace target
 apps/api/target/
 
+
+# Server runtime logs
+apps/api/server.log
+apps/api/server.err
+
