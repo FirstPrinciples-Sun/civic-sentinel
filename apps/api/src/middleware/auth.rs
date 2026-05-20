@@ -1,4 +1,5 @@
 use axum::{
+    body::Body,
     extract::{Request, State},
     http::{header, StatusCode},
     middleware::Next,
@@ -10,7 +11,7 @@ use std::sync::Arc;
 
 use crate::config::AppConfig;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String,        // User ID
     pub email: String,      // User email
@@ -32,7 +33,7 @@ pub enum UserRole {
 /// Extracts JWT from Authorization header and validates it
 pub async fn auth_middleware(
     State(config): State<Arc<AppConfig>>,
-    mut request: Request,
+    mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let auth_header = request
@@ -67,6 +68,6 @@ pub async fn auth_middleware(
 }
 
 /// Extract claims from request extensions
-pub fn get_claims(request: &Request) -> Option<&Claims> {
+pub fn get_claims(request: &Request<Body>) -> Option<&Claims> {
     request.extensions().get::<Claims>()
 }

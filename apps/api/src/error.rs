@@ -1,7 +1,7 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde_json::json;
 
-/// Application-wide error type that maps to HTTP responses
+/// Application-wide error type that maps to meaningful HTTP responses
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("Database error: {0}")]

@@ -1,20 +1,19 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
-    response::Json,
 };
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::db::Database;
 use crate::models::*;
 use crate::services::ai_classifier::AIClassifier;
+use crate::AppState;
 
 pub async fn list_issues(
-    State(db): State<Database>,
+    State(state): State<AppState>,
     Query(query): Query<IssueListQuery>,
 ) -> (StatusCode, Json<Value>) {
-    match db.list_issues(&query).await {
+    match state.db.list_issues(&query).await {
         Ok((issues, total)) => {
             let page = query.page.unwrap_or(1);
             let limit = query.limit.unwrap_or(20);
@@ -40,10 +39,9 @@ pub async fn list_issues(
 }
 
 pub async fn create_issue(
-    State(db): State<Database>,
+    State(state): State<AppState>,
     Json(payload): Json<CreateIssueRequest>,
 ) -> (StatusCode, Json<Value>) {
-    // Auto-classify category and priority using AI
     let category = payload.category.unwrap_or_else(|| {
         AIClassifier::classify_category(&payload.title, &payload.description)
     });
@@ -67,12 +65,12 @@ pub async fn create_issue(
         deleted_at: None,
     };
 
-    match db.insert_issue(&issue).await {
+    match state.db.insert_issue(&issue).await {
         Ok(_) => {
             (StatusCode::CREATED, Json(json!({
                 "success": true,
                 "data": issue,
-                "message": "Issue reported successfully. Our AI is analyzing priority."
+                "message": "Issue reported successfully."
             })))
         }
         Err(e) => {
@@ -86,10 +84,10 @@ pub async fn create_issue(
 }
 
 pub async fn get_issue(
-    State(db): State<Database>,
+    State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> (StatusCode, Json<Value>) {
-    match db.get_issue(id).await {
+    match state.db.get_issue(id).await {
         Ok(Some(issue)) => {
             (StatusCode::OK, Json(json!({
                 "success": true,
@@ -114,12 +112,12 @@ pub async fn get_issue(
 }
 
 pub async fn update_issue(
-    State(db): State<Database>,
+    State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateIssueRequest>,
 ) -> (StatusCode, Json<Value>) {
-    // Fetch current issue to validate status transition
-    let current_issue = match db.get_issue(id).await {
+    // Fetch current issue
+    let current = match state.db.get_issue(id).await {
         Ok(Some(issue)) => issue,
         Ok(None) => {
             return (StatusCode::NOT_FOUND, Json(json!({
@@ -139,7 +137,7 @@ pub async fn update_issue(
 
     // Validate status transition if status is being updated
     if let Some(new_status) = &payload.status {
-        let old_status = &current_issue.status;
+        let old_status = &current.status;
         if old_status != new_status {
             if !is_valid_status_transition(old_status, new_status, payload.reason.as_deref()) {
                 return (StatusCode::BAD_REQUEST, Json(json!({
@@ -159,16 +157,16 @@ pub async fn update_issue(
                 created_at: chrono::Utc::now(),
             };
 
-            if let Err(e) = db.insert_status_history(&history_entry).await {
+            if let Err(e) = state.db.insert_status_history(&history_entry).await {
                 tracing::error!("Failed to log status history: {}", e);
             }
         }
     }
 
-    match db.update_issue(id, &payload).await {
+    match state.db.update_issue(id, &payload, &current).await {
         Ok(_) => {
-            // Fetch updated issue to return
-            match db.get_issue(id).await {
+            // Fetch updated issue
+            match state.db.get_issue(id).await {
                 Ok(Some(issue)) => {
                     (StatusCode::OK, Json(json!({
                         "success": true,
@@ -195,10 +193,10 @@ pub async fn update_issue(
 }
 
 pub async fn delete_issue(
-    State(db): State<Database>,
+    State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> (StatusCode, Json<Value>) {
-    match db.get_issue(id).await {
+    match state.db.get_issue(id).await {
         Ok(Some(_)) => {}
         Ok(None) => {
             return (StatusCode::NOT_FOUND, Json(json!({
@@ -216,7 +214,7 @@ pub async fn delete_issue(
         }
     }
 
-    match db.delete_issue(id).await {
+    match state.db.delete_issue(id).await {
         Ok(_) => {
             (StatusCode::OK, Json(json!({
                 "success": true,

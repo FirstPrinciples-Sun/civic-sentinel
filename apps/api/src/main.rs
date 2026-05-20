@@ -1,7 +1,7 @@
 use axum::{
+    extract::Json,
     http::StatusCode,
-    response::Json,
-    routing::{delete, get, patch, post},
+    routing::{get},
     Router,
 };
 use serde::Serialize;
@@ -15,6 +15,13 @@ mod middleware;
 mod models;
 mod routes;
 mod services;
+
+/// Application state shared across handlers
+#[derive(Clone)]
+pub struct AppState {
+    pub db: db::Database,
+    pub config: Arc<config::AppConfig>,
+}
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -51,11 +58,6 @@ async fn api_info() -> Json<ApiInfo> {
             "POST /api/v1/issues — Report an issue".to_string(),
             "GET /api/v1/issues — List issues".to_string(),
             "GET /api/v1/issues/:id — Get issue details".to_string(),
-            "PATCH /api/v1/issues/:id — Update an issue".to_string(),
-            "DELETE /api/v1/issues/:id — Delete an issue".to_string(),
-            "POST /api/v1/issues/:id/comments — Add a comment".to_string(),
-            "GET /api/v1/issues/:id/comments — List comments".to_string(),
-            "GET /api/v1/issues/:id/history — Get status history".to_string(),
             "GET /api/v1/analytics — Impact analytics".to_string(),
         ],
     })
@@ -70,10 +72,10 @@ async fn main() {
 
     // Load configuration
     let app_config = match config::AppConfig::load() {
-        Ok(cfg) => cfg,
+        Ok(cfg) => Arc::new(cfg),
         Err(e) => {
             tracing::warn!("Failed to load config file ({}), using defaults", e);
-            config::AppConfig::default()
+            Arc::new(config::AppConfig::default())
         }
     };
 
@@ -94,9 +96,21 @@ async fn main() {
         }
     };
 
+    let state = AppState {
+        db: database,
+        config: app_config,
+    };
+
+    // Build router
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/info", get(api_info))
+        // Auth routes (pending AuthState -> AppState alignment)
+        // .route("/api/v1/auth/register", post(routes::auth::register))
+        // .route("/api/v1/auth/login", post(routes::auth::login))
+        // .route("/api/v1/auth/refresh", post(routes::auth::refresh))
+        // .route("/api/v1/auth/logout", post(routes::auth::logout))
+        // Issue routes
         .route(
             "/api/v1/issues",
             get(routes::issues::list_issues).post(routes::issues::create_issue),
@@ -115,10 +129,11 @@ async fn main() {
             "/api/v1/issues/:id/history",
             get(routes::status_history::get_status_history),
         )
+        // Analytics
         .route("/api/v1/analytics", get(routes::analytics::get_analytics))
-        .with_state(database);
+        .with_state(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], app_config.server.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("API server listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
