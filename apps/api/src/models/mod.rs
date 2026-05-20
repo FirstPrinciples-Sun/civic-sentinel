@@ -18,6 +18,11 @@ pub struct Issue {
     pub assigned_to: Option<Uuid>,
     pub media_urls: Vec<String>,
     pub tags: Vec<String>,
+    pub verification_score: i32,
+    pub verification_state: VerificationState,
+    pub duplicate_of: Option<Uuid>,
+    pub corroboration_count: i32,
+    pub triage_score: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub resolved_at: Option<DateTime<Utc>>,
@@ -148,6 +153,37 @@ impl FromStr for IssueStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationState {
+    Trusted,
+    NeedsReview,
+    Suspicious,
+}
+
+impl VerificationState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VerificationState::Trusted => "trusted",
+            VerificationState::NeedsReview => "needs_review",
+            VerificationState::Suspicious => "suspicious",
+        }
+    }
+}
+
+impl FromStr for VerificationState {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "trusted" => Ok(VerificationState::Trusted),
+            "needs_review" => Ok(VerificationState::NeedsReview),
+            "suspicious" => Ok(VerificationState::Suspicious),
+            _ => Err(format!("Unknown verification state: {}", s)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateIssueRequest {
     pub title: String,
@@ -156,6 +192,8 @@ pub struct CreateIssueRequest {
     pub location: GeoLocation,
     pub media_urls: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
+    pub otp_phone: Option<String>,
+    pub otp_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +211,7 @@ pub struct IssueListQuery {
     pub status: Option<IssueStatus>,
     pub category: Option<IssueCategory>,
     pub priority: Option<Priority>,
+    pub verification_state: Option<VerificationState>,
     pub sort: Option<String>,
     pub page: Option<u32>,
     pub limit: Option<u32>,
@@ -190,8 +229,6 @@ pub struct Comment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCommentRequest {
-    pub issue_id: Uuid,
-    pub author_id: Uuid,
     pub content: String,
     pub is_internal: Option<bool>,
 }

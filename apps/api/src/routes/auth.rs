@@ -1,10 +1,11 @@
 use axum::{
     extract::{Json, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use rand::Rng;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
@@ -77,6 +78,49 @@ fn parse_role(role_str: &str) -> UserRole {
         "reporter" => UserRole::Reporter,
         _ => UserRole::Viewer,
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct RequestPhoneOtpRequest {
+    #[validate(length(min = 8, max = 20, message = "Phone number must be 8-20 characters"))]
+    pub phone: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct VerifyPhoneOtpRequest {
+    #[validate(length(min = 8, max = 20, message = "Phone number must be 8-20 characters"))]
+    pub phone: String,
+    #[validate(length(equal = 6, message = "OTP code must be 6 digits"))]
+    pub code: String,
+}
+
+fn normalize_phone(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let normalized: String = trimmed
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == '+')
+        .collect();
+    if normalized.len() < 8 || normalized.len() > 20 {
+        return None;
+    }
+    Some(normalized)
+}
+
+fn parse_optional_claims(headers: &HeaderMap, secret: &str) -> Option<Claims> {
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .and_then(|token| {
+            let validation = Validation::new(Algorithm::HS256);
+            let key = DecodingKey::from_secret(secret.as_bytes());
+            decode::<Claims>(token, &key, &validation)
+                .ok()
+                .map(|data| data.claims)
+        })
 }
 
 pub async fn register(
@@ -628,6 +672,219 @@ pub async fn refresh(
             role,
         },
     }))
+}
+
+pub async fn request_phone_otp(
+    State(state): State<AppState>,
+    Json(payload): Json<RequestPhoneOtpRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Err(errors) = payload.validate() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "Validation failed",
+                "details": errors.field_errors()
+            })),
+        ));
+    }
+
+    let phone = normalize_phone(&payload.phone).ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "Invalid phone number format"
+            })),
+        )
+    })?;
+
+    let otp_code = format!("{:06}", rand::thread_rng().gen_range(0..1_000_000));
+    let code_hash = hash_refresh_token(&format!("{}:{}", phone, otp_code));
+    let expires_at = Utc::now() + Duration::minutes(5);
+    let challenge_id = Uuid::new_v4();
+
+    state
+        .db
+        .create_phone_otp_challenge(challenge_id, &phone, &code_hash, expires_at)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to create OTP challenge: {}", e)
+                })),
+            )
+        })?;
+
+    tracing::info!("OTP requested for {} (challenge: {})", phone, challenge_id);
+    tracing::info!("OTP code for {} is {}", phone, otp_code);
+
+    let run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "development".to_string());
+    let include_dev_code = run_mode != "production";
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "phone": phone,
+            "challenge_id": challenge_id,
+            "expires_in_seconds": 300,
+            "otp_code": if include_dev_code { json!(otp_code) } else { json!(null) }
+        },
+        "message": "OTP has been generated."
+    })))
+}
+
+pub async fn verify_phone_otp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<VerifyPhoneOtpRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Err(errors) = payload.validate() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "Validation failed",
+                "details": errors.field_errors()
+            })),
+        ));
+    }
+
+    let phone = normalize_phone(&payload.phone).ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "Invalid phone number format"
+            })),
+        )
+    })?;
+
+    let challenge = state
+        .db
+        .get_latest_active_phone_otp_challenge(&phone)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to load OTP challenge: {}", e)
+                })),
+            )
+        })?;
+
+    let Some((challenge_id, code_hash, expires_at, attempts)) = challenge else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "No active OTP challenge for this phone number"
+            })),
+        ));
+    };
+
+    if attempts >= 5 {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "success": false,
+                "error": "Too many invalid attempts. Please request a new OTP."
+            })),
+        ));
+    }
+
+    if Utc::now() > expires_at {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "OTP has expired. Please request a new one."
+            })),
+        ));
+    }
+
+    state
+        .db
+        .mark_phone_otp_attempt(challenge_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to update OTP attempts: {}", e)
+                })),
+            )
+        })?;
+
+    let submitted_hash = hash_refresh_token(&format!("{}:{}", phone, payload.code.trim()));
+    if submitted_hash != code_hash {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Invalid OTP code"
+            })),
+        ));
+    }
+
+    state
+        .db
+        .consume_phone_otp_challenge(challenge_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to consume OTP challenge: {}", e)
+                })),
+            )
+        })?;
+
+    let verification_token = generate_refresh_token();
+    let verification_hash = hash_refresh_token(&verification_token);
+    let verification_expires = Utc::now() + Duration::minutes(30);
+
+    state
+        .db
+        .create_phone_verification_token(
+            Uuid::new_v4(),
+            &phone,
+            &verification_hash,
+            verification_expires,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to create verification token: {}", e)
+                })),
+            )
+        })?;
+
+    if let Some(claims) = parse_optional_claims(&headers, &state.config.auth.jwt_secret) {
+        if let Ok(user_id) = Uuid::parse_str(&claims.sub) {
+            if let Err(e) = state.db.mark_user_phone_verified(user_id, &phone).await {
+                tracing::warn!("Failed to mark user {} as phone-verified: {}", user_id, e);
+            }
+        }
+    }
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "phone": phone,
+            "verification_token": verification_token,
+            "expires_in_seconds": 1800
+        },
+        "message": "Phone OTP verified successfully."
+    })))
 }
 
 pub async fn logout(

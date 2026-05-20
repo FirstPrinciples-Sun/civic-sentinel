@@ -1,7 +1,9 @@
 import { Activity, CheckCircle, Clock, AlertTriangle, TrendingUp, Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAnalytics } from '../hooks/useAnalytics'
 import { useIssues } from '../hooks/useIssues'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { useI18n } from '../context/LanguageContext'
 
 const CATEGORY_COLORS: Record<string, string> = {
   infrastructure: '#10b981',
@@ -9,22 +11,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   environment: '#3b82f6',
   sanitation: '#f59e0b',
   transportation: '#8b5cf6',
-  public_utility: '#06b6d4',
+  publicutility: '#06b6d4',
   other: '#64748b',
-}
-
-function formatCategory(category: string): string {
-  return category.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 function getStatusColor(status: string): string {
@@ -43,8 +31,10 @@ function getStatusColor(status: string): string {
 }
 
 export default function DashboardPage() {
+  const { t, formatCategory, formatPriority, formatStatus, locale } = useI18n()
   const { data: analytics, isLoading: analyticsLoading, error: analyticsError } = useAnalytics()
-  const { data: issues, isLoading: issuesLoading, error: issuesError } = useIssues(1, 10)
+  const { data: issuesResult, isLoading: issuesLoading, error: issuesError } = useIssues(1, 10)
+  const issues = issuesResult?.issues
 
   const categoryData = analytics?.issues_by_category.map((item) => ({
     name: formatCategory(item.category),
@@ -55,9 +45,19 @@ export default function DashboardPage() {
   const criticalCount =
     analytics?.issues_by_priority.find((p) => p.priority === 'critical')?.count ?? 0
 
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold gradient-text mb-8">Impact Dashboard</h1>
+      <h1 className="text-3xl font-bold gradient-text mb-8">{t('dashboard.title')}</h1>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -71,31 +71,31 @@ export default function DashboardPage() {
         ) : analyticsError ? (
           <div className="col-span-full glass-panel p-6 text-center text-red-400">
             <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
-            <p>Failed to load analytics data.</p>
+            <p>{t('dashboard.failedAnalytics')}</p>
           </div>
         ) : (
           <>
             <StatCard
               icon={Activity}
-              label="Total Issues"
+              label={t('dashboard.stats.total')}
               value={String(analytics?.total_issues ?? 0)}
               trend="+0%"
             />
             <StatCard
               icon={Clock}
-              label="Open Issues"
+              label={t('dashboard.stats.open')}
               value={String(analytics?.open_issues ?? 0)}
               trend="0"
             />
             <StatCard
               icon={CheckCircle}
-              label="Resolved"
+              label={t('dashboard.stats.resolved')}
               value={String(analytics?.resolved_issues ?? 0)}
               trend="+0%"
             />
             <StatCard
               icon={AlertTriangle}
-              label="Critical"
+              label={t('dashboard.stats.critical')}
               value={String(criticalCount)}
               trend="0"
             />
@@ -106,18 +106,18 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="grid md:grid-cols-2 gap-6">
         <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold mb-4">Issues by Category</h3>
+          <h3 className="text-lg font-semibold mb-4">{t('dashboard.section.byCategory')}</h3>
           {analyticsLoading ? (
             <div className="h-64 flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
             </div>
           ) : analyticsError ? (
             <div className="h-64 flex items-center justify-center text-red-400 text-sm">
-              Failed to load chart data
+              {t('dashboard.failedChart')}
             </div>
           ) : categoryData.length === 0 ? (
             <div className="h-64 flex items-center justify-center text-slate-500">
-              <p>No data available</p>
+              <p>{t('dashboard.noData')}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={256}>
@@ -144,13 +144,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold mb-4">Resolution Timeline</h3>
+          <h3 className="text-lg font-semibold mb-4">{t('dashboard.section.timeline')}</h3>
           <div className="h-64 flex items-center justify-center text-slate-500">
             <div className="text-center">
               <TrendingUp className="w-10 h-10 mx-auto mb-3 text-slate-600" />
-              <p className="text-sm">Coming soon with historical data</p>
+              <p className="text-sm">{t('dashboard.comingSoon')}</p>
               <p className="text-xs text-slate-600 mt-1">
-                Avg resolution: {analytics?.avg_resolution_hours?.toFixed(1) ?? 0}h
+                {t('dashboard.avgResolution')}: {t('dashboard.hours', { hours: analytics?.avg_resolution_hours?.toFixed(1) ?? 0 })}
               </p>
             </div>
           </div>
@@ -159,7 +159,7 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <div className="glass-panel p-6 mt-6">
-        <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+        <h3 className="text-lg font-semibold mb-4">{t('dashboard.section.recent')}</h3>
         {issuesLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
@@ -167,17 +167,18 @@ export default function DashboardPage() {
         ) : issuesError ? (
           <div className="text-center py-12 text-red-400">
             <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
-            <p>Failed to load recent activity.</p>
+            <p>{t('dashboard.failedRecent')}</p>
           </div>
         ) : !issues || issues.length === 0 ? (
           <div className="text-center py-12 text-slate-500">
-            <p>No issues reported yet. Be the first to make an impact!</p>
+            <p>{t('dashboard.noRecent')}</p>
           </div>
         ) : (
           <div className="space-y-3">
             {issues.map((issue) => (
-              <div
+              <Link
                 key={issue.id}
+                to={`/issues/${issue.id}`}
                 className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:border-slate-600/50 transition-all"
               >
                 <div className="flex-1 min-w-0">
@@ -185,7 +186,7 @@ export default function DashboardPage() {
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full capitalize ${getStatusColor(issue.status)}`}
                     >
-                      {issue.status.replace(/_/g, ' ')}
+                      {formatStatus(issue.status)}
                     </span>
                     <span className="text-xs text-slate-500 capitalize">
                       {formatCategory(issue.category)}
@@ -203,9 +204,9 @@ export default function DashboardPage() {
                         : 'text-slate-400 bg-slate-500/10'
                   }`}
                 >
-                  {issue.priority}
+                  {formatPriority(issue.priority)}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

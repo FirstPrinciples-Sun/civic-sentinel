@@ -10,7 +10,7 @@
 
 MVP is functionally complete. Backend compiles, runs, and serves all endpoints. Frontend builds and includes auth pages. End-to-end flow (register → login → create issue → view analytics) is verified working.
 
-**Last updated:** May 2026  
+**Last updated:** May 20, 2026  
 **Current phase:** MVP complete — integration verified
 
 ---
@@ -48,14 +48,14 @@ A WebAssembly analytics module (Rust → WASM) is planned for browser-side issue
 - **Analytics** — Real aggregation from database (total, open, resolved, by category, by priority, impact score)
 - **Middleware** — Security headers + rate limiting active on all routes + CORS configured
 - **Frontend** — React + Vite builds clean; pages: Home, Report, Map, Dashboard, Login, Register
+- **Issue detail UI** — `/issues/:id` page with comments and status history timeline
+- **Photo uploads** — multipart image upload endpoint + report form image uploader with preview
 - **Auth context** — localStorage persistence, JWT auto-attach via Axios interceptor, protected route guards
 - **Docker** — Multi-stage Dockerfile + docker-compose.yml ready
 - **CI/CD** — GitHub Actions for Rust build and web build
 
 ## What Is Planned Next
 
-- [ ] File upload for issue photos (currently accepts URL strings only)
-- [ ] Issue detail page with comments and status history timeline
 - [ ] Admin role guards on backend (currently all authenticated users can modify any issue)
 - [ ] Email/LINE notifications for status changes
 - [ ] Heat map visualization on Map page

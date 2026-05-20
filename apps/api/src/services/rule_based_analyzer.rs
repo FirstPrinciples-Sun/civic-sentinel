@@ -65,7 +65,10 @@ impl RuleBasedAnalyzer {
         }
     }
 
-    /// Detect duplicate issues based on location proximity and similarity
+    /// Detect duplicate issues based on location proximity and title similarity.
+    /// Duplicate threshold:
+    /// - distance <= 100 meters
+    /// - title similarity >= 0.75
     pub fn detect_duplicate(new_issue: &Issue, existing_issues: &[Issue]) -> Option<uuid::Uuid> {
         for existing in existing_issues {
             let distance = Self::haversine_distance(
@@ -75,10 +78,10 @@ impl RuleBasedAnalyzer {
                 existing.location.longitude,
             );
 
-            if distance < 100.0 {
+            if distance <= 100.0 {
                 // Within 100 meters
                 let similarity = Self::text_similarity(&new_issue.title, &existing.title);
-                if similarity > 0.8 {
+                if similarity >= 0.75 {
                     return Some(existing.id);
                 }
             }

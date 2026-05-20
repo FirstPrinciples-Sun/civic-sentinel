@@ -53,12 +53,44 @@ pub async fn create_comment(
             })),
         );
     }
+
+    let trimmed = payload.content.trim();
+    if trimmed.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "Comment content cannot be empty"
+            })),
+        );
+    }
+
+    let author_id = match Uuid::parse_str(&claims.sub) {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "success": false,
+                    "error": "Invalid authentication context"
+                })),
+            )
+        }
+    };
+
+    // Internal comments are reserved for admins/responders.
+    let is_internal = if matches!(claims.role, UserRole::Admin | UserRole::Responder) {
+        payload.is_internal.unwrap_or(false)
+    } else {
+        false
+    };
+
     let comment = Comment {
         id: Uuid::new_v4(),
         issue_id,
-        author_id: payload.author_id,
-        content: payload.content,
-        is_internal: payload.is_internal.unwrap_or(false),
+        author_id,
+        content: trimmed.to_string(),
+        is_internal,
         created_at: chrono::Utc::now(),
     };
 
