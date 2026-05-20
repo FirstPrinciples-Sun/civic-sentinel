@@ -39,7 +39,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-50 glass-panel border-b border-slate-700/50">
+      <header className="sticky top-0 z-50 border-b border-slate-700/60 bg-[#0b1218]/95 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center space-x-3">
@@ -55,8 +55,8 @@ export default function Layout() {
                   to={item.path}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
                     location.pathname === item.path
-                      ? 'bg-sky-500/10 text-sky-300'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                      ? 'bg-sky-500/10 text-sky-200 shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
                   }`}
                 >
                   <item.icon className="w-4 h-4" />

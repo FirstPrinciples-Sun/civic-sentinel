@@ -559,22 +559,23 @@ export default function ReportPage() {
         <p className="text-slate-400">{t('report.subtitle')}</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium mb-2">{t('report.field.title')}</label>
-          <input
-            {...register('title')}
-            className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
-            placeholder={t('report.placeholder.title')}
-          />
-          {errors.title && <p className="text-red-400 text-sm mt-1">{errors.title.message}</p>}
-        </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <div className="form-section space-y-5">
+          <div>
+            <label className="form-label">{t('report.field.title')}</label>
+            <input
+              {...register('title')}
+              className="form-control"
+              placeholder={t('report.placeholder.title')}
+            />
+            {errors.title && <p className="text-red-400 text-sm mt-1">{errors.title.message}</p>}
+          </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">{t('report.field.category')}</label>
+          <label className="form-label">{t('report.field.category')}</label>
           <select
             {...register('category')}
-            className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"
+            className="form-control"
           >
             <option value="infrastructure">{formatCategory('infrastructure')}</option>
             <option value="safety">{formatCategory('safety')}</option>
@@ -587,18 +588,19 @@ export default function ReportPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">{t('report.field.description')}</label>
+          <label className="form-label">{t('report.field.description')}</label>
           <textarea
             {...register('description')}
             rows={4}
-            className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none resize-none"
+            className="form-control resize-none"
             placeholder={t('report.placeholder.description')}
             onBlur={analyzeIssue}
           />
           {errors.description && <p className="text-red-400 text-sm mt-1">{errors.description.message}</p>}
         </div>
+        </div>
 
-        <div className="glass-panel p-4 space-y-4">
+        <div className="form-section space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
@@ -624,7 +626,7 @@ export default function ReportPage() {
               value={locationQuery}
               onChange={(event) => setLocationQuery(event.target.value)}
               placeholder={t('report.location.search')}
-              className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-sm"
+              className="form-control flex-1 py-2 text-sm"
             />
             <button
               type="button"
@@ -651,7 +653,7 @@ export default function ReportPage() {
               <label className="block text-sm font-medium mb-2">{t('report.field.latitude')}</label>
               <input
                 {...register('latitude', { valueAsNumber: true })}
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg"
+                className="form-control py-2.5"
                 onBlur={() => void reverseGeocode(safeLatitude, safeLongitude)}
               />
             </div>
@@ -659,7 +661,7 @@ export default function ReportPage() {
               <label className="block text-sm font-medium mb-2">{t('report.field.longitude')}</label>
               <input
                 {...register('longitude', { valueAsNumber: true })}
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg"
+                className="form-control py-2.5"
                 onBlur={() => void reverseGeocode(safeLatitude, safeLongitude)}
               />
             </div>
@@ -669,13 +671,13 @@ export default function ReportPage() {
             <label className="block text-sm font-medium mb-2">{t('report.field.address')}</label>
             <input
               {...register('address')}
-              className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg"
+              className="form-control py-2.5"
               placeholder={t('report.placeholder.address')}
             />
           </div>
         </div>
 
-        <div className="glass-panel p-4 space-y-4">
+        <div className="form-section space-y-4">
           <div className="flex flex-col gap-1">
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-sky-300" />
@@ -697,7 +699,7 @@ export default function ReportPage() {
                   setOtpVerificationToken(null)
                   setOtpVerifiedPhone(null)
                 }}
-                className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg"
+                className="form-control py-2.5"
               >
                 {OTP_COUNTRIES.map((country) => (
                   <option key={country.code} value={country.code}>
@@ -724,7 +726,7 @@ export default function ReportPage() {
                     setOtpVerifiedPhone(null)
                   }}
                   placeholder={t('report.otp.phonePlaceholder')}
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-r-lg"
+                  className="w-full px-4 py-2.5 bg-slate-800/95 border border-slate-700 rounded-r-lg text-slate-100 placeholder-slate-500 outline-none transition-all focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
                 />
               </div>
               <p className="text-xs text-slate-500 mt-1">{t('report.otp.normalized')}: {otpPhone || '-'}</p>
@@ -746,7 +748,7 @@ export default function ReportPage() {
                   value={digit}
                   onChange={(event) => handleOtpDigitChange(index, event.target.value)}
                   onKeyDown={(event) => handleOtpDigitKeyDown(index, event)}
-                  className="w-11 h-11 text-center text-lg font-semibold bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"
+                  className="w-11 h-11 text-center text-lg font-semibold bg-slate-800/95 border border-slate-700 rounded-lg outline-none transition-all focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
                 />
               ))}
             </div>
@@ -782,9 +784,9 @@ export default function ReportPage() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">{t('report.field.photos')}</label>
-          <label className="w-full px-4 py-4 border border-dashed border-slate-600 rounded-lg bg-slate-800/40 hover:bg-slate-800/70 cursor-pointer transition-all flex items-center justify-center gap-2 text-slate-300">
+        <div className="form-section">
+          <label className="form-label">{t('report.field.photos')}</label>
+          <label className="w-full px-4 py-5 border border-dashed border-slate-500/80 rounded-lg bg-slate-800/35 hover:bg-slate-800/70 hover:border-sky-400/60 cursor-pointer transition-all flex items-center justify-center gap-2 text-slate-300">
             {isUploading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-sky-300" />

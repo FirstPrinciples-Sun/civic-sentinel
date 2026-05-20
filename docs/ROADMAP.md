@@ -260,3 +260,32 @@ Validation run:
 Suggested next tasks:
 1. Add component-level tests for OTP digit input/paste behavior and admin draft-state transitions.
 2. Add server-side phone normalization parity tests for E.164 and legacy input handling.
+
+### 2026-05-20 (UI Polish Smoke Check)
+
+Completed in this continuation:
+- Ran the Vite dev server and visually checked the main UI surfaces in browser:
+  - report flow
+  - admin restricted state
+  - live map
+  - dashboard loading state
+- Improved shared visual system:
+  - replaced the flat one-color app background with a restrained civic grid/gradient backdrop
+  - tightened shared panel radius/shadow treatment
+  - added reusable `form-section`, `form-label`, and `form-control` styles
+- Polished top navigation:
+  - removed card-like rounded header styling
+  - added cleaner sticky header treatment and calmer active nav state
+- Polished report UX:
+  - grouped issue detail fields into a clear form section
+  - standardized input/select/textarea focus states
+  - improved location, OTP, and photo upload panel consistency
+
+Validation run:
+- Browser smoke check completed against `http://127.0.0.1:5173`.
+- `apps/web`: `npm run typecheck` passed.
+- `apps/web`: `npm run build` passed.
+
+Suggested next tasks:
+1. Add a visual regression/smoke test for `/report`, `/admin`, `/map`, and `/dashboard`.
+2. Consider code-splitting route chunks to reduce the current Vite bundle size warning.
