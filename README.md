@@ -8,10 +8,10 @@
 
 ## Current Status
 
-This project is under active development. The API and frontend scaffolding are in place, along with a Docker-based deployment setup and CI/CD pipelines. The database layer, authentication, and end-to-end issue lifecycle are partially implemented but not yet wired into the UI.
+MVP is functionally complete. Backend compiles, runs, and serves all endpoints. Frontend builds and includes auth pages. End-to-end flow (register → login → create issue → view analytics) is verified working.
 
 **Last updated:** May 2026  
-**Current phase:** MVP scaffolding & core API development
+**Current phase:** MVP complete — integration verified
 
 ---
 
@@ -40,27 +40,28 @@ A WebAssembly analytics module (Rust → WASM) is planned for browser-side issue
 
 ## What Works Now
 
-These parts are implemented and functional at the API or UI level:
-
-- **Project structure** — Rust workspace, React app, WASM crate, Docker setup
-- **Health check endpoint** — `GET /health` returns service status
-- **Issue model and routes** — `GET /api/v1/info`, `POST /api/v1/issues`, `GET /api/v1/issues/:id`
-- **React frontend shell** — Routing, layout, and page stubs for Home, Report, Map, and Dashboard
-- **Docker Compose setup** — Builds and runs the backend and frontend containers
-- **CI pipelines** — GitHub Actions for Rust formatting, clippy, tests, and builds
-- **Middleware scaffolding** — JWT auth, rate limiting, and security headers (not all wired to routes yet)
-- **Database schema** — SQL migrations for users, issues, comments, status history, and refresh tokens
+- **Backend API** — Rust (Axum) compiles with `cargo clippy -D warnings`, runs with `cargo run`
+- **Database** — SQLite/libSQL with migrations for users, issues, comments, status history, refresh tokens
+- **Auth system** — Register, login, refresh token, logout with JWT + argon2 password hashing
+- **Protected routes** — POST/PATCH/DELETE issues/comments require valid JWT (returns 401 otherwise)
+- **Issue CRUD** — Create, list (with pagination/filter), get by ID, update status, soft delete
+- **Analytics** — Real aggregation from database (total, open, resolved, by category, by priority, impact score)
+- **Middleware** — Security headers + rate limiting active on all routes + CORS configured
+- **Frontend** — React + Vite builds clean; pages: Home, Report, Map, Dashboard, Login, Register
+- **Auth context** — localStorage persistence, JWT auto-attach via Axios interceptor, protected route guards
+- **Docker** — Multi-stage Dockerfile + docker-compose.yml ready
+- **CI/CD** — GitHub Actions for Rust build and web build
 
 ## What Is Planned Next
 
-- [ ] Wire the database into API handlers (currently returns empty/mock data)
-- [ ] Implement user registration and login (UI + API)
-- [ ] Complete issue CRUD: create, read, update status, list with filters
-- [ ] Connect the report form to the API
-- [ ] Populate the dashboard with real data
-- [ ] Add file upload for issue photos
-- [ ] Integrate the WebAssembly module for browser-side text analysis
+- [ ] File upload for issue photos (currently accepts URL strings only)
+- [ ] Issue detail page with comments and status history timeline
+- [ ] Admin role guards on backend (currently all authenticated users can modify any issue)
+- [ ] Email/LINE notifications for status changes
+- [ ] Heat map visualization on Map page
+- [ ] Full-text search via SQLite FTS
 - [ ] Deploy a public demo instance
+- [ ] Unit and integration tests
 
 ---
 
