@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ConnectInfo, Request, State},
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::Response,
@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-use crate::config::AppConfig;
+use crate::{config::AppConfig, AppState};
 
 /// Rate limiter using token bucket algorithm
 #[derive(Clone)]
@@ -48,7 +48,8 @@ impl RateLimiter {
 
         // Add tokens based on time elapsed
         let elapsed = now.duration_since(bucket.last_update);
-        let tokens_to_add = (elapsed.as_secs_f64() / window.as_secs_f64() * max_requests as f64) as u32;
+        let tokens_to_add =
+            (elapsed.as_secs_f64() / window.as_secs_f64() * max_requests as f64) as u32;
         bucket.tokens = (bucket.tokens + tokens_to_add).min(max_requests);
         bucket.last_update = now;
 
@@ -65,21 +66,24 @@ impl RateLimiter {
         let mut buckets = self.buckets.write().await;
         let now = Instant::now();
         let max_age = Duration::from_secs(300); // 5 minutes
-        
-        buckets.retain(|_, bucket| {
-            now.duration_since(bucket.last_update) < max_age
-        });
+
+        buckets.retain(|_, bucket| now.duration_since(bucket.last_update) < max_age);
     }
 }
 
 /// Rate limiting middleware
 pub async fn rate_limit_middleware(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(limiter): State<Arc<RateLimiter>>,
+    State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let key = addr.ip().to_string();
+    let key = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("127.0.0.1")
+        .to_string();
+    let limiter = RateLimiter::new(state.config.clone());
 
     if !limiter.is_allowed(&key).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);

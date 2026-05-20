@@ -1,7 +1,6 @@
 /// Issue classification service
 /// Uses simple keyword matching for categorization
 /// WebAssembly module provides browser-side analysis
-
 use crate::models::{Issue, IssueCategory, Priority};
 
 pub struct AIClassifier;
@@ -10,14 +9,30 @@ impl AIClassifier {
     /// Classify issue category from title and description
     pub fn classify_category(title: &str, description: &str) -> IssueCategory {
         let text = format!("{} {}", title, description).to_lowercase();
-        
-        if text.contains("road") || text.contains("bridge") || text.contains("sidewalk") || text.contains("pothole") {
+
+        if text.contains("road")
+            || text.contains("bridge")
+            || text.contains("sidewalk")
+            || text.contains("pothole")
+        {
             IssueCategory::Infrastructure
-        } else if text.contains("flood") || text.contains("trash") || text.contains("pollution") || text.contains("tree") {
+        } else if text.contains("flood")
+            || text.contains("trash")
+            || text.contains("pollution")
+            || text.contains("tree")
+        {
             IssueCategory::Environment
-        } else if text.contains("light") || text.contains("water") || text.contains("electric") || text.contains("pipe") {
+        } else if text.contains("light")
+            || text.contains("water")
+            || text.contains("electric")
+            || text.contains("pipe")
+        {
             IssueCategory::PublicUtility
-        } else if text.contains("accident") || text.contains("dangerous") || text.contains("unsafe") || text.contains("crime") {
+        } else if text.contains("accident")
+            || text.contains("dangerous")
+            || text.contains("unsafe")
+            || text.contains("crime")
+        {
             IssueCategory::Safety
         } else if text.contains("bus") || text.contains("traffic") || text.contains("sign") {
             IssueCategory::Transportation
@@ -29,9 +44,16 @@ impl AIClassifier {
     /// Score urgency based on keywords
     pub fn score_priority(title: &str, description: &str) -> Priority {
         let text = format!("{} {}", title, description).to_lowercase();
-        let critical_keywords = ["emergency", "urgent", "dangerous", "life-threatening", "fire", "flood"];
+        let critical_keywords = [
+            "emergency",
+            "urgent",
+            "dangerous",
+            "life-threatening",
+            "fire",
+            "flood",
+        ];
         let high_keywords = ["broken", "leaking", "unsafe", "blocked", "outage"];
-        
+
         if critical_keywords.iter().any(|kw| text.contains(kw)) {
             Priority::Critical
         } else if high_keywords.iter().any(|kw| text.contains(kw)) {
@@ -52,8 +74,9 @@ impl AIClassifier {
                 existing.location.latitude,
                 existing.location.longitude,
             );
-            
-            if distance < 100.0 { // Within 100 meters
+
+            if distance < 100.0 {
+                // Within 100 meters
                 let similarity = Self::text_similarity(&new_issue.title, &existing.title);
                 if similarity > 0.8 {
                     return Some(existing.id);
@@ -74,18 +97,20 @@ impl AIClassifier {
     }
 
     fn text_similarity(a: &str, b: &str) -> f64 {
-        let a_words: std::collections::HashSet<String> = a.to_lowercase()
+        let a_words: std::collections::HashSet<String> = a
+            .to_lowercase()
             .split_whitespace()
             .map(|s| s.to_string())
             .collect();
-        let b_words: std::collections::HashSet<String> = b.to_lowercase()
+        let b_words: std::collections::HashSet<String> = b
+            .to_lowercase()
             .split_whitespace()
             .map(|s| s.to_string())
             .collect();
-        
+
         let intersection: std::collections::HashSet<_> = a_words.intersection(&b_words).collect();
         let union: std::collections::HashSet<_> = a_words.union(&b_words).collect();
-        
+
         intersection.len() as f64 / union.len() as f64
     }
 }

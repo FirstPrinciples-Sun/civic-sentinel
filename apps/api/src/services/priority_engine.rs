@@ -1,6 +1,5 @@
 /// Priority scoring engine
 /// Combines AI classification with time-based escalation
-
 use crate::models::{Issue, Priority};
 use chrono::Utc;
 
@@ -33,7 +32,7 @@ impl PriorityEngine {
     /// Determine if issue should be escalated
     pub fn should_escalate(issue: &Issue) -> bool {
         let hours_open = (Utc::now() - issue.created_at).num_hours();
-        
+
         match issue.priority {
             Priority::Critical => hours_open > 2,
             Priority::High => hours_open > 24,

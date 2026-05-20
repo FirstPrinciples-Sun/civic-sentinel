@@ -1,6 +1,5 @@
 /// Multi-channel notification service
 /// Routes alerts to the right responders via email, SMS, LINE, or webhook
-
 use crate::models::Issue;
 use tracing::info;
 
@@ -33,10 +32,7 @@ impl NotificationService {
     }
 
     pub async fn notify_resolution(issue: &Issue) {
-        info!(
-            "✅ Issue resolved: {}",
-            issue.title
-        );
+        info!("✅ Issue resolved: {}", issue.title);
         // TODO: Implement resolution notifications
     }
 }

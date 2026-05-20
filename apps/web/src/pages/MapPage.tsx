@@ -1,5 +1,4 @@
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
-import { MapPin } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
 export default function MapPage() {

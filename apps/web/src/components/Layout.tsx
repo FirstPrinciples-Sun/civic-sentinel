@@ -1,10 +1,13 @@
-import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Shield, Map, BarChart3, FileText, Menu, X } from 'lucide-react'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Shield, Map, BarChart3, FileText, Menu, X, LogIn, LogOut, User } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, isAuthenticated, logout } = useAuth()
 
   const navItems = [
     { path: '/', label: 'Home', icon: Shield },
@@ -12,6 +15,11 @@ export default function Layout() {
     { path: '/map', label: 'Live Map', icon: Map },
     { path: '/dashboard', label: 'Analytics', icon: BarChart3 },
   ]
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/')
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -42,13 +50,40 @@ export default function Layout() {
               ))}
             </nav>
 
-            {/* Mobile Menu Button */}
-            <button
-              className="md:hidden p-2 text-slate-300 hover:text-white"
-              onClick={() => setMenuOpen(!menuOpen)}
-            >
-              {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+            {/* Auth Buttons */}
+            <div className="flex items-center gap-3">
+              {isAuthenticated ? (
+                <button
+                  onClick={handleLogout}
+                  className="hidden md:flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Logout</span>
+                </button>
+              ) : (
+                <div className="hidden md:flex items-center gap-2">
+                  <Link
+                    to="/login"
+                    className="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all flex items-center gap-2"
+                  >
+                    <LogIn className="w-4 h-4" /> Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all"
+                  >
+                    Get Started
+                  </Link>
+                </div>
+              )}
+              {/* Mobile Menu Button */}
+              <button
+                className="md:hidden p-2 text-slate-300 hover:text-white"
+                onClick={() => setMenuOpen(!menuOpen)}
+              >
+                {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -70,6 +105,24 @@ export default function Layout() {
                 <span>{item.label}</span>
               </Link>
             ))}
+            {isAuthenticated ? (
+              <button
+                onClick={() => { handleLogout(); setMenuOpen(false) }}
+                className="flex items-center space-x-3 px-4 py-3 text-slate-300 w-full"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Logout ({user?.name || user?.email})</span>
+              </button>
+            ) : (
+              <>
+                <Link to="/login" className="flex items-center space-x-3 px-4 py-3 text-slate-300" onClick={() => setMenuOpen(false)}>
+                  <LogIn className="w-5 h-5" /><span>Sign In</span>
+                </Link>
+                <Link to="/register" className="flex items-center space-x-3 px-4 py-3 text-emerald-400" onClick={() => setMenuOpen(false)}>
+                  <User className="w-5 h-5" /><span>Get Started</span>
+                </Link>
+              </>
+            )}
           </div>
         )}
       </header>

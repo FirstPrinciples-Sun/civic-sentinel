@@ -13,18 +13,22 @@ pub async fn get_comments(
     Path(issue_id): Path<Uuid>,
 ) -> (StatusCode, Json<Value>) {
     match state.db.get_comments(issue_id).await {
-        Ok(comments) => {
-            (StatusCode::OK, Json(json!({
+        Ok(comments) => (
+            StatusCode::OK,
+            Json(json!({
                 "success": true,
                 "data": comments
-            })))
-        }
+            })),
+        ),
         Err(e) => {
             tracing::error!("Failed to get comments: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to retrieve comments"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to retrieve comments"
+                })),
+            )
         }
     }
 }
@@ -44,19 +48,23 @@ pub async fn create_comment(
     };
 
     match state.db.insert_comment(&comment).await {
-        Ok(_) => {
-            (StatusCode::CREATED, Json(json!({
+        Ok(_) => (
+            StatusCode::CREATED,
+            Json(json!({
                 "success": true,
                 "data": comment,
                 "message": "Comment added successfully"
-            })))
-        }
+            })),
+        ),
         Err(e) => {
             tracing::error!("Failed to create comment: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "success": false,
-                "error": "Failed to add comment"
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to add comment"
+                })),
+            )
         }
     }
 }
