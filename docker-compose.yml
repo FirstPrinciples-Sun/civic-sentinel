@@ -9,7 +9,7 @@ services:
       - "3000:3000"
     environment:
       - RUST_LOG=info
-      - DATABASE_URL=libsql://data/civic-sentinel.db
+      - DATABASE_URL=sqlite://data/civic-sentinel.db
     volumes:
       - ./data:/app/data
     restart: unless-stopped
