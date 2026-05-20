@@ -66,8 +66,8 @@ export default function HomePage() {
         />
         <FeatureCard
           icon={Zap}
-          title="Smart Routing"
-          description="Issues are routed to the right people automatically."
+          title="Organized Response"
+          description="Issues are categorized and assigned to the right responders by administrators."
         />
         <FeatureCard
           icon={Users}

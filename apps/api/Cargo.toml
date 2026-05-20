@@ -3,7 +3,7 @@ name = "civic-sentinel-api"
 version = "0.1.0"
 edition = "2021"
 authors = ["FirstPrinciples-Sun <rtchanaphon@gmail.com>"]
-description = "AI-powered civic resilience API"
+description = "Civic issue reporting and tracking platform"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/FirstPrinciples-Sun/civic-sentinel"
 rust-version = "1.75"
@@ -47,6 +47,7 @@ dotenvy = "0.15"
 
 # Security
 headers = "0.4"
+sha2 = "0.10"
 
 # System
 num_cpus = "1.16"

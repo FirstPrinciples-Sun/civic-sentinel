@@ -1,3 +1,4 @@
+use crate::AppState;
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -7,7 +8,6 @@ use axum::{
 };
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {

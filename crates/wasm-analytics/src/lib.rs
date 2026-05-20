@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// WebAssembly module for privacy-preserving analytics
-/// Runs ML inference directly in the browser — no data leaves the device
+/// Runs rule-based keyword scoring directly in the browser — no data leaves the device
 
 #[wasm_bindgen]
 extern "C" {

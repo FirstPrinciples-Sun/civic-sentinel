@@ -3,6 +3,15 @@ import { Shield, Map, BarChart3, FileText, Menu, X, LogIn, LogOut, User } from '
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 
+function roleBadge(role: string) {
+  switch (role) {
+    case 'admin': return { label: 'Admin', className: 'bg-rose-500/20 text-rose-400 border-rose-500/30' }
+    case 'responder': return { label: 'Responder', className: 'bg-amber-500/20 text-amber-400 border-amber-500/30' }
+    case 'reporter': return { label: 'Reporter', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' }
+    default: return { label: 'Viewer', className: 'bg-slate-500/20 text-slate-400 border-slate-500/30' }
+  }
+}
+
 export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
@@ -52,14 +61,24 @@ export default function Layout() {
 
             {/* Auth Buttons */}
             <div className="flex items-center gap-3">
-              {isAuthenticated ? (
-                <button
-                  onClick={handleLogout}
-                  className="hidden md:flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
-                </button>
+              {isAuthenticated && user ? (
+                <div className="hidden md:flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700">
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm text-slate-300">{user.name || user.email}</span>
+                    {(() => {
+                      const badge = roleBadge(user.role)
+                      return <span className={`text-xs px-1.5 py-0.5 rounded border ${badge.className}`}>{badge.label}</span>
+                    })()}
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
               ) : (
                 <div className="hidden md:flex items-center gap-2">
                   <Link

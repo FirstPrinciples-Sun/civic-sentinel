@@ -1,10 +1,11 @@
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Extension, Json, Path, State},
     http::StatusCode,
 };
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::middleware::auth::{Claims, UserRole};
 use crate::models::*;
 use crate::AppState;
 
@@ -34,10 +35,24 @@ pub async fn get_comments(
 }
 
 pub async fn create_comment(
+    Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
     Path(issue_id): Path<Uuid>,
     Json(payload): Json<CreateCommentRequest>,
 ) -> (StatusCode, Json<Value>) {
+    // Role check: Admin, Responder, or Reporter
+    if !matches!(
+        claims.role,
+        UserRole::Admin | UserRole::Responder | UserRole::Reporter
+    ) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "error": "Insufficient permissions. Admin, Responder, or Reporter role required."
+            })),
+        );
+    }
     let comment = Comment {
         id: Uuid::new_v4(),
         issue_id,

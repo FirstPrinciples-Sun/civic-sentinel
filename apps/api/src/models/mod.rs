@@ -168,7 +168,7 @@ pub struct UpdateIssueRequest {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IssueListQuery {
     pub status: Option<IssueStatus>,
     pub category: Option<IssueCategory>,

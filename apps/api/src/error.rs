@@ -30,10 +30,9 @@ impl IntoResponse for AppError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Database operation failed".to_string(),
             ),
-            AppError::Serialization(_) => (
-                StatusCode::BAD_REQUEST,
-                "Invalid data format".to_string(),
-            ),
+            AppError::Serialization(_) => {
+                (StatusCode::BAD_REQUEST, "Invalid data format".to_string())
+            }
             AppError::InvalidUuid(_) => (
                 StatusCode::BAD_REQUEST,
                 "Invalid identifier format".to_string(),

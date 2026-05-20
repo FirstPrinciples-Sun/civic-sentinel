@@ -24,6 +24,13 @@ fn generate_refresh_token() -> String {
         .collect()
 }
 
+fn hash_refresh_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
     use argon2::{
         password_hash::{rand_core::OsRng, SaltString},
@@ -182,6 +189,7 @@ pub async fn register(
     })?;
 
     let refresh_token = generate_refresh_token();
+    let refresh_token_hash = hash_refresh_token(&refresh_token);
     let refresh_expires = now + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     conn.execute(
@@ -189,7 +197,7 @@ pub async fn register(
         [
             Uuid::new_v4().to_string(),
             user_id.to_string(),
-            refresh_token.clone(),
+            refresh_token_hash,
             refresh_expires.to_rfc3339(),
             now.to_rfc3339(),
         ],
@@ -343,6 +351,7 @@ pub async fn login(
     })?;
 
     let refresh_token = generate_refresh_token();
+    let refresh_token_hash = hash_refresh_token(&refresh_token);
     let refresh_expires =
         Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
 
@@ -351,7 +360,7 @@ pub async fn login(
         [
             Uuid::new_v4().to_string(),
             user_id,
-            refresh_token.clone(),
+            refresh_token_hash,
             refresh_expires.to_rfc3339(),
             Utc::now().to_rfc3339(),
         ],
@@ -386,10 +395,11 @@ pub async fn refresh(
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
     let conn = state.db.conn().await;
+    let token_hash = hash_refresh_token(&payload.refresh_token);
     let mut rows = conn
         .query(
             "SELECT user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = ?",
-            [payload.refresh_token.clone()],
+            [token_hash.clone()],
         )
         .await
         .map_err(|e| {
@@ -565,13 +575,14 @@ pub async fn refresh(
     })?;
 
     let new_refresh_token = generate_refresh_token();
+    let new_refresh_token_hash = hash_refresh_token(&new_refresh_token);
     let refresh_expires =
         Utc::now() + Duration::days(state.config.auth.refresh_token_expiration_days);
 
     // Revoke old token and insert new one
     conn.execute(
         "UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ?",
-        [Utc::now().to_rfc3339(), payload.refresh_token.clone()],
+        [Utc::now().to_rfc3339(), token_hash],
     )
     .await
     .map_err(|e| {
@@ -589,7 +600,7 @@ pub async fn refresh(
         [
             Uuid::new_v4().to_string(),
             user_id,
-            new_refresh_token.clone(),
+            new_refresh_token_hash,
             refresh_expires.to_rfc3339(),
             Utc::now().to_rfc3339(),
         ],
@@ -624,9 +635,10 @@ pub async fn logout(
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let conn = state.db.conn().await;
+    let token_hash = hash_refresh_token(&payload.refresh_token);
     conn.execute(
         "UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ?",
-        [Utc::now().to_rfc3339(), payload.refresh_token],
+        [Utc::now().to_rfc3339(), token_hash],
     )
     .await
     .map_err(|e| {

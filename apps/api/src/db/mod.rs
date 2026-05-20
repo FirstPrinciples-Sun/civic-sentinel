@@ -249,8 +249,19 @@ impl Database {
             .as_ref()
             .or(current.assigned_to.as_ref());
 
+        // Set resolved_at when transitioning to Resolved or Closed for the first time, and clear if reopened
+        let resolved_at = if matches!(status, IssueStatus::Resolved | IssueStatus::Closed) {
+            if current.resolved_at.is_none() {
+                Some(chrono::Utc::now().to_rfc3339())
+            } else {
+                current.resolved_at.as_ref().map(|dt| dt.to_rfc3339())
+            }
+        } else {
+            None
+        };
+
         conn.execute(
-            "UPDATE issues SET title = ?1, description = ?2, status = ?3, priority = ?4, assigned_to = ?5, updated_at = ?6 WHERE id = ?7 AND deleted_at IS NULL",
+            "UPDATE issues SET title = ?1, description = ?2, status = ?3, priority = ?4, assigned_to = ?5, updated_at = ?6, resolved_at = ?7 WHERE id = ?8 AND deleted_at IS NULL",
             (
                 title.as_str(),
                 description.as_str(),
@@ -258,6 +269,7 @@ impl Database {
                 priority.as_str(),
                 assigned_to.map(|uid| uid.to_string()),
                 chrono::Utc::now().to_rfc3339(),
+                resolved_at,
                 id.to_string(),
             ),
         ).await?;
@@ -566,5 +578,179 @@ impl Database {
             issues_by_category,
             issues_by_priority,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AppConfig;
+
+    async fn setup_db() -> Database {
+        let mut config = AppConfig::default();
+        config.database.url = format!("sqlite://test-{}.db", Uuid::new_v4());
+        let db = Database::new(&config).await.unwrap();
+        db.migrate().await.unwrap();
+        db
+    }
+
+    fn sample_issue() -> Issue {
+        Issue {
+            id: Uuid::new_v4(),
+            title: "Pothole".to_string(),
+            description: "Large pothole on Main St".to_string(),
+            category: IssueCategory::Infrastructure,
+            priority: Priority::Medium,
+            status: IssueStatus::Reported,
+            location: GeoLocation {
+                latitude: 13.7563,
+                longitude: 100.5018,
+                address: Some("Bangkok".to_string()),
+            },
+            reporter_id: None,
+            assigned_to: None,
+            media_urls: vec![],
+            tags: vec![],
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            resolved_at: None,
+            deleted_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_issue() {
+        let db = setup_db().await;
+        let issue = sample_issue();
+        db.insert_issue(&issue).await.unwrap();
+
+        let (issues, total) = db.list_issues(&IssueListQuery::default()).await.unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(issues[0].title, "Pothole");
+        assert_eq!(issues[0].status, IssueStatus::Reported);
+    }
+
+    #[tokio::test]
+    async fn test_update_issue_status() {
+        let db = setup_db().await;
+        let issue = sample_issue();
+        db.insert_issue(&issue).await.unwrap();
+
+        let (issues, _) = db.list_issues(&IssueListQuery::default()).await.unwrap();
+        let id = issues[0].id;
+
+        let update = UpdateIssueRequest {
+            title: None,
+            description: None,
+            status: Some(IssueStatus::InProgress),
+            priority: None,
+            assigned_to: None,
+            reason: Some("Started repair".to_string()),
+        };
+        db.update_issue(id, &update, &issues[0]).await.unwrap();
+
+        let updated = db.get_issue(id).await.unwrap().unwrap();
+        assert_eq!(updated.status, IssueStatus::InProgress);
+    }
+
+    #[tokio::test]
+    async fn test_resolved_at_set_on_close() {
+        let db = setup_db().await;
+        let issue = sample_issue();
+        db.insert_issue(&issue).await.unwrap();
+
+        let (issues, _) = db.list_issues(&IssueListQuery::default()).await.unwrap();
+        let id = issues[0].id;
+
+        let update1 = UpdateIssueRequest {
+            title: None,
+            description: None,
+            status: Some(IssueStatus::InProgress),
+            priority: None,
+            assigned_to: None,
+            reason: Some("Started".to_string()),
+        };
+        db.update_issue(id, &update1, &issues[0]).await.unwrap();
+
+        let current = db.get_issue(id).await.unwrap().unwrap();
+
+        let update2 = UpdateIssueRequest {
+            title: None,
+            description: None,
+            status: Some(IssueStatus::Resolved),
+            priority: None,
+            assigned_to: None,
+            reason: Some("Done".to_string()),
+        };
+        db.update_issue(id, &update2, &current).await.unwrap();
+
+        let resolved = db.get_issue(id).await.unwrap().unwrap();
+        assert_eq!(resolved.status, IssueStatus::Resolved);
+        assert!(resolved.resolved_at.is_some(), "resolved_at should be set");
+    }
+
+    #[tokio::test]
+    async fn test_resolved_at_cleared_on_reopen() {
+        let db = setup_db().await;
+        let issue = sample_issue();
+        db.insert_issue(&issue).await.unwrap();
+
+        let (issues, _) = db.list_issues(&IssueListQuery::default()).await.unwrap();
+        let id = issues[0].id;
+
+        let update1 = UpdateIssueRequest {
+            title: None,
+            description: None,
+            status: Some(IssueStatus::Resolved),
+            priority: None,
+            assigned_to: None,
+            reason: Some("Done".to_string()),
+        };
+        db.update_issue(id, &update1, &issues[0]).await.unwrap();
+
+        let resolved = db.get_issue(id).await.unwrap().unwrap();
+        assert!(resolved.resolved_at.is_some());
+
+        let update2 = UpdateIssueRequest {
+            title: None,
+            description: None,
+            status: Some(IssueStatus::InProgress),
+            priority: None,
+            assigned_to: None,
+            reason: Some("Reopened".to_string()),
+        };
+        db.update_issue(id, &update2, &resolved).await.unwrap();
+
+        let reopened = db.get_issue(id).await.unwrap().unwrap();
+        assert_eq!(reopened.status, IssueStatus::InProgress);
+        assert!(
+            reopened.resolved_at.is_none(),
+            "resolved_at should be cleared"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_soft_delete_issue() {
+        let db = setup_db().await;
+        let issue = sample_issue();
+        db.insert_issue(&issue).await.unwrap();
+
+        let (issues, total) = db.list_issues(&IssueListQuery::default()).await.unwrap();
+        assert_eq!(total, 1);
+
+        db.delete_issue(issues[0].id).await.unwrap();
+        let (_, total_after) = db.list_issues(&IssueListQuery::default()).await.unwrap();
+        assert_eq!(total_after, 0);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_summary() {
+        let db = setup_db().await;
+        let issue = sample_issue();
+        db.insert_issue(&issue).await.unwrap();
+
+        let summary = db.get_analytics_summary().await.unwrap();
+        assert_eq!(summary.total_issues, 1);
+        assert_eq!(summary.open_issues, 1);
     }
 }

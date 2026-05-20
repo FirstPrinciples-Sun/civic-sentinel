@@ -10,6 +10,7 @@ services:
     environment:
       - RUST_LOG=info
       - DATABASE_URL=sqlite://data/civic-sentinel.db
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_must_be_32_characters_long_for_security}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

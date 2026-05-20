@@ -3,9 +3,9 @@
 /// WebAssembly module provides browser-side analysis
 use crate::models::{Issue, IssueCategory, Priority};
 
-pub struct AIClassifier;
+pub struct RuleBasedAnalyzer;
 
-impl AIClassifier {
+impl RuleBasedAnalyzer {
     /// Classify issue category from title and description
     pub fn classify_category(title: &str, description: &str) -> IssueCategory {
         let text = format!("{} {}", title, description).to_lowercase();

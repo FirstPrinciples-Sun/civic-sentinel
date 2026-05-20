@@ -1,13 +1,13 @@
 # Civic Sentinel — Agent Guide
 
 ## Project Overview
-Civic Sentinel is an AI-powered civic resilience platform that empowers communities to detect, prioritize, and resolve public issues through crowdsourced intelligence and automated response coordination.
+Civic Sentinel is a civic issue reporting and tracking platform that helps communities report, prioritize, and resolve public issues through crowdsourced reports and organized response coordination.
 
 ## Tech Stack
 - **Backend**: Rust (Axum) + libSQL (Turso)
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS
-- **WASM**: Rust → WebAssembly for browser-side ML inference
-- **AI**: Local inference via candle (Rust ML framework)
+- **WASM**: Rust → WebAssembly for browser-side rule-based text analysis (keyword scoring)
+- **AI / ML**: Planned — no ML/LLM inference is implemented yet
 - **Infrastructure**: Docker + GitHub Actions
 
 ## Build Commands

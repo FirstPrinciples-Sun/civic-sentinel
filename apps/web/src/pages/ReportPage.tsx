@@ -18,7 +18,7 @@ type ReportForm = z.infer<typeof reportSchema>
 
 export default function ReportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
+  const [priorityHint, setPriorityHint] = useState<string | null>(null)
 
   const {
     register,
@@ -38,15 +38,15 @@ export default function ReportPage() {
   const title = watch('title')
   const description = watch('description')
 
-  // Simulate AI analysis
+  // Simple keyword-based priority hint
   const analyzeIssue = () => {
     const text = `${title} ${description}`.toLowerCase()
     if (text.includes('flood') || text.includes('fire') || text.includes('dangerous')) {
-      setAiAnalysis('🚨 AI detected: This issue may be CRITICAL priority. Emergency services will be notified immediately.')
+      setPriorityHint('🚨 This issue may be CRITICAL priority. Consider contacting emergency services directly.')
     } else if (text.includes('broken') || text.includes('leaking')) {
-      setAiAnalysis('⚠️ AI detected: HIGH priority — infrastructure issue requiring prompt attention.')
+      setPriorityHint('⚠️ HIGH priority — infrastructure issue requiring prompt attention.')
     } else {
-      setAiAnalysis('✅ AI analysis: Standard priority. Will be reviewed and routed to appropriate department.')
+      setPriorityHint('✅ Standard priority. Will be reviewed by administrators and routed to the appropriate department.')
     }
   }
 
@@ -66,9 +66,9 @@ export default function ReportPage() {
       })
 
       if (response.data.success) {
-        toast.success(response.data.message ?? 'Issue reported successfully! Our AI is analyzing priority.')
+        toast.success(response.data.message ?? 'Issue reported successfully!')
         reset()
-        setAiAnalysis(null)
+        setPriorityHint(null)
       } else {
         toast.error(response.data.error ?? 'Failed to submit. Please try again.')
       }
@@ -89,7 +89,7 @@ export default function ReportPage() {
       <div className="text-center mb-10">
         <h1 className="text-3xl font-bold gradient-text mb-4">Report a Community Issue</h1>
         <p className="text-slate-400">
-          Your report helps improve the community. Our AI will analyze and route it to the right responders.
+          Your report helps improve the community. Admins will review and route it to the right responders.
         </p>
       </div>
 
@@ -153,12 +153,12 @@ export default function ReportPage() {
           </div>
         </div>
 
-        {/* AI Analysis */}
-        {aiAnalysis && (
+        {/* Priority Hint */}
+        {priorityHint && (
           <div className="glass-panel p-4 border-l-4 border-emerald-500">
             <div className="flex items-start space-x-3">
               <AlertTriangle className="w-5 h-5 text-emerald-400 mt-0.5" />
-              <p className="text-sm text-slate-300">{aiAnalysis}</p>
+              <p className="text-sm text-slate-300">{priorityHint}</p>
             </div>
           </div>
         )}
