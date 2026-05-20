@@ -4,13 +4,19 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
+    @apply text-slate-100 antialiased;
+    background:
+      linear-gradient(180deg, rgba(20, 83, 75, 0.22) 0%, rgba(8, 13, 17, 0) 360px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      #081015;
+    background-size: auto, 44px 44px, 44px 44px, auto;
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply bg-slate-900/80 border border-slate-700/70 rounded-xl;
+    @apply bg-slate-900/80 border border-slate-700/70 rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.18)];
   }
   
   .gradient-text {
@@ -18,10 +24,22 @@
   }
   
   .btn-primary {
-    @apply px-6 py-3 bg-sky-700 hover:bg-sky-600 text-white font-semibold rounded-lg transition-all duration-200;
+    @apply px-6 py-3 bg-sky-700 hover:bg-sky-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-[0_12px_30px_rgba(2,132,199,0.22)] focus:outline-none focus:ring-2 focus:ring-sky-300/40;
   }
   
   .btn-secondary {
-    @apply px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-lg transition-all duration-200 border border-slate-700;
+    @apply px-6 py-3 bg-slate-800/95 hover:bg-slate-700 text-slate-100 font-semibold rounded-lg transition-all duration-200 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300/20;
+  }
+
+  .form-section {
+    @apply rounded-lg border border-slate-700/70 bg-slate-900/75 p-4 md:p-5 shadow-[0_18px_55px_rgba(0,0,0,0.16)];
+  }
+
+  .form-label {
+    @apply block text-sm font-semibold text-slate-200 mb-2;
+  }
+
+  .form-control {
+    @apply w-full px-4 py-3 bg-slate-800/95 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 outline-none transition-all focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20;
   }
 }
