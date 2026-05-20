@@ -52,10 +52,27 @@ impl Database {
                 role TEXT NOT NULL DEFAULT 'reporter',
                 avatar_url TEXT,
                 email_verified BOOLEAN DEFAULT FALSE,
+                phone_verified BOOLEAN DEFAULT FALSE,
+                phone_verified_at DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )",
             (),
+        )
+        .await?;
+
+        Self::ensure_table_column(
+            &conn,
+            "users",
+            "phone_verified",
+            "ALTER TABLE users ADD COLUMN phone_verified BOOLEAN DEFAULT FALSE",
+        )
+        .await?;
+        Self::ensure_table_column(
+            &conn,
+            "users",
+            "phone_verified_at",
+            "ALTER TABLE users ADD COLUMN phone_verified_at DATETIME",
         )
         .await?;
 
@@ -77,6 +94,11 @@ impl Database {
                 tags TEXT,
                 ai_priority_score INTEGER,
                 ai_category TEXT,
+                verification_score INTEGER NOT NULL DEFAULT 35,
+                verification_state TEXT NOT NULL DEFAULT 'needs_review',
+                duplicate_of TEXT,
+                corroboration_count INTEGER NOT NULL DEFAULT 0,
+                triage_score INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 resolved_at DATETIME,
@@ -87,6 +109,12 @@ impl Database {
             (),
         )
         .await?;
+
+        Self::ensure_table_column(&conn, "issues", "verification_score", "ALTER TABLE issues ADD COLUMN verification_score INTEGER NOT NULL DEFAULT 35").await?;
+        Self::ensure_table_column(&conn, "issues", "verification_state", "ALTER TABLE issues ADD COLUMN verification_state TEXT NOT NULL DEFAULT 'needs_review'").await?;
+        Self::ensure_table_column(&conn, "issues", "duplicate_of", "ALTER TABLE issues ADD COLUMN duplicate_of TEXT").await?;
+        Self::ensure_table_column(&conn, "issues", "corroboration_count", "ALTER TABLE issues ADD COLUMN corroboration_count INTEGER NOT NULL DEFAULT 0").await?;
+        Self::ensure_table_column(&conn, "issues", "triage_score", "ALTER TABLE issues ADD COLUMN triage_score INTEGER NOT NULL DEFAULT 0").await?;
 
         // Create comments table
         conn.execute(
@@ -136,6 +164,42 @@ impl Database {
         )
         .await?;
 
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS phone_otp_challenges (
+                id TEXT PRIMARY KEY,
+                phone TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at DATETIME NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                consumed_at DATETIME,
+                attempts INTEGER NOT NULL DEFAULT 0
+            )",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_phone_otp_phone ON phone_otp_challenges(phone)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS phone_verification_tokens (
+                id TEXT PRIMARY KEY,
+                phone TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                expires_at DATETIME NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                consumed_at DATETIME
+            )",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_phone_verification_tokens_phone ON phone_verification_tokens(phone)",
+            (),
+        )
+        .await?;
+
         // Create indexes
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status)",
@@ -154,6 +218,21 @@ impl Database {
         .await?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_issues_created ON issues(created_at)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_verification_state ON issues(verification_state)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_duplicate_of ON issues(duplicate_of)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_triage ON issues(triage_score)",
             (),
         )
         .await?;
@@ -182,7 +261,32 @@ impl Database {
         self.client.lock().await
     }
 
-    /// Insert a new issue (16 params max to satisfy libsql IntoParams tuple limit)
+    async fn ensure_table_column(
+        conn: &libsql::Connection,
+        table_name: &str,
+        column_name: &str,
+        alter_sql: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let pragma_sql = format!("PRAGMA table_info({})", table_name);
+        let mut rows = conn.query(pragma_sql.as_str(), ()).await?;
+        let mut exists = false;
+
+        while let Some(row) = rows.next().await? {
+            let current_name: String = row.get::<String>(1)?;
+            if current_name == column_name {
+                exists = true;
+                break;
+            }
+        }
+
+        if !exists {
+            conn.execute(alter_sql, ()).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Insert a new issue (split into insert + score metadata update to satisfy tuple param limits)
     pub async fn insert_issue(
         &self,
         issue: &Issue,
@@ -210,6 +314,25 @@ impl Database {
                 issue.resolved_at.map(|dt| dt.to_rfc3339()),
             ),
         ).await?;
+
+        conn.execute(
+            "UPDATE issues
+             SET verification_score = ?1,
+                 verification_state = ?2,
+                 duplicate_of = ?3,
+                 corroboration_count = ?4,
+                 triage_score = ?5
+             WHERE id = ?6",
+            (
+                issue.verification_score,
+                issue.verification_state.as_str(),
+                issue.duplicate_of.map(|id| id.to_string()),
+                issue.corroboration_count,
+                issue.triage_score,
+                issue.id.to_string(),
+            ),
+        )
+        .await?;
         Ok(())
     }
 
@@ -220,7 +343,7 @@ impl Database {
     ) -> Result<Option<Issue>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
         let mut rows = conn.query(
-            "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at, deleted_at
+            "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, verification_score, verification_state, duplicate_of, corroboration_count, triage_score, created_at, updated_at, resolved_at, deleted_at
              FROM issues WHERE id = ?1 AND deleted_at IS NULL",
             [id.to_string()],
         ).await?;
@@ -293,48 +416,435 @@ impl Database {
         Ok(())
     }
 
-    /// List issues with optional filters (applied in-memory for flexibility)
+    /// List issues with SQL-level filters, sorting, and pagination.
     pub async fn list_issues(
         &self,
         query: &IssueListQuery,
     ) -> Result<(Vec<Issue>, i64), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
-        let mut rows = conn.query(
-            "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, created_at, updated_at, resolved_at, deleted_at
-             FROM issues WHERE deleted_at IS NULL ORDER BY created_at DESC",
-            (),
-        ).await?;
+        let mut where_clauses = vec!["deleted_at IS NULL".to_string()];
 
-        let mut issues = vec![];
-        while let Some(row) = rows.next().await? {
-            issues.push(self.row_to_issue(&row)?);
-        }
-
-        // Apply filters in memory
         if let Some(status) = &query.status {
-            issues.retain(|i| &i.status == status);
+            where_clauses.push(format!("status = '{}'", status.as_str()));
         }
         if let Some(category) = &query.category {
-            issues.retain(|i| &i.category == category);
+            where_clauses.push(format!("category = '{}'", category.as_str()));
         }
         if let Some(priority) = &query.priority {
-            issues.retain(|i| &i.priority == priority);
+            where_clauses.push(format!("priority = '{}'", priority.as_str()));
+        }
+        if let Some(verification_state) = &query.verification_state {
+            where_clauses.push(format!(
+                "verification_state = '{}'",
+                verification_state.as_str()
+            ));
         }
 
-        // Sort
-        match query.sort.as_deref() {
-            Some("updated_at") => issues.sort_by_key(|b| std::cmp::Reverse(b.updated_at)),
-            Some("priority") => issues.sort_by_key(|b| std::cmp::Reverse(b.priority.clone())),
-            _ => {} // Already sorted by created_at DESC from query
-        }
+        let where_sql = where_clauses.join(" AND ");
 
-        let total = issues.len() as i64;
+        let sort_sql = match query.sort.as_deref() {
+            Some("updated_at") => "updated_at DESC, created_at DESC",
+            Some("priority") => {
+                "CASE priority
+                    WHEN 'critical' THEN 4
+                    WHEN 'high' THEN 3
+                    WHEN 'medium' THEN 2
+                    ELSE 1
+                 END DESC, created_at DESC"
+            }
+            Some("triage") => {
+                "(
+                    CASE priority
+                      WHEN 'critical' THEN 80
+                      WHEN 'high' THEN 60
+                      WHEN 'medium' THEN 40
+                      ELSE 20
+                    END
+                    + ((100 - verification_score) / 2)
+                    + MIN(corroboration_count * 5, 20)
+                    + MIN(CAST((strftime('%s','now') - strftime('%s', created_at)) / 21600 AS INTEGER), 40)
+                 ) DESC, created_at DESC"
+            }
+            _ => "created_at DESC",
+        };
+
         let page = query.page.unwrap_or(1).max(1) as usize;
         let limit = query.limit.unwrap_or(20).clamp(1, 100) as usize;
         let offset = (page - 1) * limit;
 
-        let paginated: Vec<Issue> = issues.into_iter().skip(offset).take(limit).collect();
-        Ok((paginated, total))
+        let count_sql = format!("SELECT COUNT(*) FROM issues WHERE {}", where_sql);
+        let mut count_rows = conn.query(count_sql.as_str(), ()).await?;
+        let total = if let Some(row) = count_rows.next().await? {
+            row.get::<i64>(0)?
+        } else {
+            0
+        };
+
+        let sql = format!(
+            "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, verification_score, verification_state, duplicate_of, corroboration_count, triage_score, created_at, updated_at, resolved_at, deleted_at
+             FROM issues
+             WHERE {}
+             ORDER BY {}
+             LIMIT {} OFFSET {}",
+            where_sql, sort_sql, limit, offset
+        );
+
+        let mut rows = conn.query(sql.as_str(), ()).await?;
+        let mut issues = Vec::new();
+        let now = chrono::Utc::now();
+
+        while let Some(row) = rows.next().await? {
+            let mut issue = self.row_to_issue(&row)?;
+            issue.triage_score = Self::calculate_triage_score(
+                &issue.priority,
+                issue.verification_score,
+                issue.corroboration_count,
+                issue.created_at,
+                now,
+            );
+            issues.push(issue);
+        }
+
+        Ok((issues, total))
+    }
+
+    pub async fn list_duplicate_candidates(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        delta: f64,
+        active_since: DateTime<Utc>,
+    ) -> Result<Vec<Issue>, Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        let min_lat = latitude - delta;
+        let max_lat = latitude + delta;
+        let min_lng = longitude - delta;
+        let max_lng = longitude + delta;
+
+        let mut rows = conn
+            .query(
+                "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, verification_score, verification_state, duplicate_of, corroboration_count, triage_score, created_at, updated_at, resolved_at, deleted_at
+                 FROM issues
+                 WHERE deleted_at IS NULL
+                   AND status IN ('reported', 'underreview', 'inprogress', 'escalated')
+                   AND created_at >= ?1
+                   AND latitude BETWEEN ?2 AND ?3
+                   AND longitude BETWEEN ?4 AND ?5
+                 ORDER BY created_at DESC",
+                (
+                    active_since.to_rfc3339(),
+                    min_lat,
+                    max_lat,
+                    min_lng,
+                    max_lng,
+                ),
+            )
+            .await?;
+
+        let mut issues = Vec::new();
+        while let Some(row) = rows.next().await? {
+            issues.push(self.row_to_issue(&row)?);
+        }
+
+        Ok(issues)
+    }
+
+    pub async fn increment_corroboration_count(
+        &self,
+        issue_id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "UPDATE issues
+             SET corroboration_count = corroboration_count + 1,
+                 updated_at = ?1
+             WHERE id = ?2 AND deleted_at IS NULL",
+            (chrono::Utc::now().to_rfc3339(), issue_id.to_string()),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn update_issue_scores(
+        &self,
+        issue_id: Uuid,
+        verification_score: i32,
+        verification_state: VerificationState,
+        triage_score: i32,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "UPDATE issues
+             SET verification_score = ?1,
+                 verification_state = ?2,
+                 triage_score = ?3,
+                 updated_at = ?4
+             WHERE id = ?5 AND deleted_at IS NULL",
+            (
+                verification_score,
+                verification_state.as_str(),
+                triage_score,
+                chrono::Utc::now().to_rfc3339(),
+                issue_id.to_string(),
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_reporter_trust_signals(
+        &self,
+        reporter_id: Uuid,
+    ) -> Result<(i64, i64, bool, bool), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+
+        let mut account_rows = conn
+            .query(
+                "SELECT created_at, phone_verified
+                 FROM users
+                 WHERE id = ?1",
+                [reporter_id.to_string()],
+            )
+            .await?;
+
+        let (account_age_days, phone_verified) = if let Some(row) = account_rows.next().await? {
+            let created_at = row.get::<String>(0)?.parse::<DateTime<Utc>>()?;
+            let phone_verified_value: i64 = row.get::<i64>(1).unwrap_or(0);
+            (
+                (chrono::Utc::now() - created_at).num_days(),
+                phone_verified_value != 0,
+            )
+        } else {
+            (0, false)
+        };
+
+        let mut resolved_rows = conn
+            .query(
+                "SELECT COUNT(*)
+                 FROM issues
+                 WHERE reporter_id = ?1
+                   AND deleted_at IS NULL
+                   AND status IN ('resolved', 'closed')",
+                [reporter_id.to_string()],
+            )
+            .await?;
+        let resolved_count = if let Some(row) = resolved_rows.next().await? {
+            row.get::<i64>(0)?
+        } else {
+            0
+        };
+
+        let mut reopened_rows = conn
+            .query(
+                "SELECT COUNT(*)
+                 FROM issue_status_history h
+                 JOIN issues i ON i.id = h.issue_id
+                 WHERE i.reporter_id = ?1
+                   AND i.deleted_at IS NULL
+                   AND h.old_status IN ('resolved', 'closed')
+                   AND h.new_status NOT IN ('closed', 'resolved')",
+                [reporter_id.to_string()],
+            )
+            .await?;
+        let reopened_count = if let Some(row) = reopened_rows.next().await? {
+            row.get::<i64>(0)?
+        } else {
+            0
+        };
+
+        Ok((resolved_count, account_age_days, reopened_count == 0, phone_verified))
+    }
+
+    pub fn calculate_triage_score(
+        priority: &Priority,
+        verification_score: i32,
+        corroboration_count: i32,
+        created_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> i32 {
+        let priority_weight = match priority {
+            Priority::Critical => 80,
+            Priority::High => 60,
+            Priority::Medium => 40,
+            Priority::Low => 20,
+        };
+        let trust_review_weight = (100 - verification_score).max(0) / 2;
+        let corroboration_boost = (corroboration_count.max(0) * 5).min(20);
+        let age_hours = (now - created_at).num_hours().max(0);
+        let age_boost = ((age_hours / 6) as i32).min(40);
+
+        priority_weight + trust_review_weight + corroboration_boost + age_boost
+    }
+
+    pub async fn create_phone_otp_challenge(
+        &self,
+        challenge_id: Uuid,
+        phone: &str,
+        code_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "INSERT INTO phone_otp_challenges (id, phone, code_hash, expires_at, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            (
+                challenge_id.to_string(),
+                phone.to_string(),
+                code_hash.to_string(),
+                expires_at.to_rfc3339(),
+                chrono::Utc::now().to_rfc3339(),
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_latest_active_phone_otp_challenge(
+        &self,
+        phone: &str,
+    ) -> Result<Option<(Uuid, String, DateTime<Utc>, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        let mut rows = conn
+            .query(
+                "SELECT id, code_hash, expires_at, attempts
+                 FROM phone_otp_challenges
+                 WHERE phone = ?1
+                   AND consumed_at IS NULL
+                 ORDER BY created_at DESC
+                 LIMIT 1",
+                [phone.to_string()],
+            )
+            .await?;
+
+        if let Some(row) = rows.next().await? {
+            let id = row.get::<String>(0)?.parse()?;
+            let code_hash = row.get::<String>(1)?;
+            let expires_at = row.get::<String>(2)?.parse::<DateTime<Utc>>()?;
+            let attempts = row.get::<i64>(3)?;
+            Ok(Some((id, code_hash, expires_at, attempts)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn mark_phone_otp_attempt(
+        &self,
+        challenge_id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "UPDATE phone_otp_challenges
+             SET attempts = attempts + 1
+             WHERE id = ?1",
+            [challenge_id.to_string()],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn consume_phone_otp_challenge(
+        &self,
+        challenge_id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "UPDATE phone_otp_challenges
+             SET consumed_at = ?1
+             WHERE id = ?2",
+            (
+                chrono::Utc::now().to_rfc3339(),
+                challenge_id.to_string(),
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn create_phone_verification_token(
+        &self,
+        token_id: Uuid,
+        phone: &str,
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "INSERT INTO phone_verification_tokens (id, phone, token_hash, expires_at, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            (
+                token_id.to_string(),
+                phone.to_string(),
+                token_hash.to_string(),
+                expires_at.to_rfc3339(),
+                chrono::Utc::now().to_rfc3339(),
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn consume_phone_verification_token(
+        &self,
+        phone: &str,
+        token_hash: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        let mut rows = conn
+            .query(
+                "SELECT id, expires_at
+                 FROM phone_verification_tokens
+                 WHERE phone = ?1
+                   AND token_hash = ?2
+                   AND consumed_at IS NULL
+                 ORDER BY created_at DESC
+                 LIMIT 1",
+                (phone.to_string(), token_hash.to_string()),
+            )
+            .await?;
+
+        let Some(row) = rows.next().await? else {
+            return Ok(false);
+        };
+
+        let token_id: String = row.get::<String>(0)?;
+        let expires_at = row.get::<String>(1)?.parse::<DateTime<Utc>>()?;
+        if chrono::Utc::now() > expires_at {
+            return Ok(false);
+        }
+
+        conn.execute(
+            "UPDATE phone_verification_tokens
+             SET consumed_at = ?1
+             WHERE id = ?2",
+            (chrono::Utc::now().to_rfc3339(), token_id),
+        )
+        .await?;
+
+        Ok(true)
+    }
+
+    pub async fn mark_user_phone_verified(
+        &self,
+        user_id: Uuid,
+        phone: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = self.client.lock().await;
+        conn.execute(
+            "UPDATE users
+             SET phone = ?1,
+                 phone_verified = 1,
+                 phone_verified_at = ?2,
+                 updated_at = ?3
+             WHERE id = ?4",
+            (
+                phone.to_string(),
+                chrono::Utc::now().to_rfc3339(),
+                chrono::Utc::now().to_rfc3339(),
+                user_id.to_string(),
+            ),
+        )
+        .await?;
+        Ok(())
     }
 
     /// Insert a comment
@@ -449,14 +959,22 @@ impl Database {
                 .transpose()?,
             media_urls: serde_json::from_str(&row.get::<String>(11)?)?,
             tags: serde_json::from_str(&row.get::<String>(12)?)?,
-            created_at: row.get::<String>(13)?.parse::<DateTime<Utc>>()?,
-            updated_at: row.get::<String>(14)?.parse::<DateTime<Utc>>()?,
-            resolved_at: row
+            verification_score: row.get::<i32>(13)?,
+            verification_state: row.get::<String>(14)?.parse()?,
+            duplicate_of: row
                 .get::<Option<String>>(15)?
                 .map(|s| s.parse())
                 .transpose()?,
+            corroboration_count: row.get::<i32>(16)?,
+            triage_score: row.get::<i32>(17)?,
+            created_at: row.get::<String>(18)?.parse::<DateTime<Utc>>()?,
+            updated_at: row.get::<String>(19)?.parse::<DateTime<Utc>>()?,
+            resolved_at: row
+                .get::<Option<String>>(20)?
+                .map(|s| s.parse())
+                .transpose()?,
             deleted_at: row
-                .get::<Option<String>>(16)?
+                .get::<Option<String>>(21)?
                 .map(|s| s.parse())
                 .transpose()?,
         })
@@ -611,6 +1129,11 @@ mod tests {
             assigned_to: None,
             media_urls: vec![],
             tags: vec![],
+            verification_score: 35,
+            verification_state: VerificationState::NeedsReview,
+            duplicate_of: None,
+            corroboration_count: 0,
+            triage_score: 0,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             resolved_at: None,

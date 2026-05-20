@@ -29,6 +29,32 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+function readStoredUser(): User | null {
+  const raw = localStorage.getItem('civic_user')
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as User
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.id !== 'string') {
+      localStorage.removeItem('civic_user')
+      return null
+    }
+    return parsed
+  } catch {
+    localStorage.removeItem('civic_user')
+    return null
+  }
+}
+
+function readStoredToken(): string | null {
+  const token = localStorage.getItem('civic_token')
+  if (!token || token === 'undefined' || token === 'null') {
+    localStorage.removeItem('civic_token')
+    return null
+  }
+  return token
+}
+
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be inside AuthProvider')
@@ -36,11 +62,8 @@ export function useAuth(): AuthContextType {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('civic_user')
-    return stored ? JSON.parse(stored) : null
-  })
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('civic_token'))
+  const [user, setUser] = useState<User | null>(() => readStoredUser())
+  const [token, setToken] = useState<string | null>(() => readStoredToken())
   const [isLoading, setIsLoading] = useState(false)
   const isAuthenticated = !!token
 

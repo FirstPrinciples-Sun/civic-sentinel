@@ -1,14 +1,66 @@
 use axum::{
     extract::{Extension, Json, Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde_json::{json, Value};
 use uuid::Uuid;
+use chrono::{Duration, Utc};
+use sha2::{Digest, Sha256};
 
 use crate::middleware::auth::{Claims, UserRole};
 use crate::models::*;
 use crate::services::rule_based_analyzer::RuleBasedAnalyzer;
 use crate::AppState;
+
+fn hash_phone_verification_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn verification_state_from_score(score: i32) -> VerificationState {
+    if score >= 70 {
+        VerificationState::Trusted
+    } else if score >= 40 {
+        VerificationState::NeedsReview
+    } else {
+        VerificationState::Suspicious
+    }
+}
+
+fn calculate_verification_score(
+    has_media: bool,
+    has_address: bool,
+    identity_verified: bool,
+    account_age_days: i64,
+    resolved_count: i64,
+    no_reopen_history: bool,
+    has_duplicate_signal: bool,
+) -> i32 {
+    let mut score = 0;
+
+    if has_media {
+        score += 35;
+    }
+    if has_address {
+        score += 15;
+    }
+    if identity_verified {
+        score += 15;
+    }
+    if account_age_days > 7 {
+        score += 10;
+    }
+    if has_duplicate_signal {
+        score += 15;
+    }
+    if resolved_count >= 2 && no_reopen_history {
+        score += 10;
+    }
+
+    score.clamp(0, 100)
+}
 
 pub async fn list_issues(
     State(state): State<AppState>,
@@ -47,40 +99,252 @@ pub async fn list_issues(
 
 pub async fn create_issue(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<CreateIssueRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let category = payload.category.unwrap_or_else(|| {
-        RuleBasedAnalyzer::classify_category(&payload.title, &payload.description)
-    });
-    let priority = RuleBasedAnalyzer::score_priority(&payload.title, &payload.description);
+    let CreateIssueRequest {
+        title,
+        description,
+        category,
+        location,
+        media_urls,
+        tags,
+        otp_phone,
+        otp_token,
+    } = payload;
 
-    let issue = Issue {
+    let media_urls = media_urls.unwrap_or_default();
+    if media_urls.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "At least one photo is required to submit an issue."
+            })),
+        );
+    }
+
+    let category = category.unwrap_or_else(|| {
+        RuleBasedAnalyzer::classify_category(&title, &description)
+    });
+    let priority = RuleBasedAnalyzer::score_priority(&title, &description);
+    let now = Utc::now();
+
+    // Optionally extract reporter_id from JWT if Authorization header is present
+    let reporter_id = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .and_then(|token| {
+            let validation = Validation::new(Algorithm::HS256);
+            let key = DecodingKey::from_secret(state.config.auth.jwt_secret.as_bytes());
+            decode::<Claims>(token, &key, &validation)
+                .ok()
+                .map(|data| data.claims)
+        })
+        .and_then(|claims| Uuid::parse_str(&claims.sub).ok());
+
+    let mut issue = Issue {
         id: Uuid::new_v4(),
-        title: payload.title,
-        description: payload.description,
+        title,
+        description,
         category,
         priority,
         status: IssueStatus::Reported,
-        location: payload.location,
-        reporter_id: None,
+        location,
+        reporter_id,
         assigned_to: None,
-        media_urls: payload.media_urls.unwrap_or_default(),
-        tags: payload.tags.unwrap_or_default(),
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        media_urls,
+        tags: tags.unwrap_or_default(),
+        verification_score: 35,
+        verification_state: VerificationState::NeedsReview,
+        duplicate_of: None,
+        corroboration_count: 0,
+        triage_score: 0,
+        created_at: now,
+        updated_at: now,
         resolved_at: None,
         deleted_at: None,
     };
 
+    let otp_verified = match (otp_phone.as_deref(), otp_token.as_deref()) {
+        (Some(phone), Some(token)) => {
+            let token_hash = hash_phone_verification_token(token);
+            match state
+                .db
+                .consume_phone_verification_token(phone, &token_hash)
+                .await
+            {
+                Ok(true) => true,
+                Ok(false) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "success": false,
+                            "error": "Invalid or expired OTP verification token."
+                        })),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to validate OTP verification token: {}", e);
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "success": false,
+                            "error": "Failed to validate OTP verification token"
+                        })),
+                    );
+                }
+            }
+        }
+        (None, None) => false,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "error": "Both otp_phone and otp_token are required together."
+                })),
+            );
+        }
+    };
+
+    let active_since = now - Duration::days(30);
+    let duplicate_candidates = match state
+        .db
+        .list_duplicate_candidates(
+            issue.location.latitude,
+            issue.location.longitude,
+            0.002,
+            active_since,
+        )
+        .await
+    {
+        Ok(candidates) => candidates,
+        Err(e) => {
+            tracing::error!("Failed to load duplicate candidates: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": "Failed to evaluate duplicate issue candidates"
+                })),
+            );
+        }
+    };
+
+    let duplicate_match_id = RuleBasedAnalyzer::detect_duplicate(&issue, &duplicate_candidates);
+    let duplicate_root_id = duplicate_match_id.and_then(|match_id| {
+        duplicate_candidates
+            .iter()
+            .find(|candidate| candidate.id == match_id)
+            .map(|candidate| candidate.duplicate_of.unwrap_or(candidate.id))
+    });
+    issue.duplicate_of = duplicate_root_id;
+
+    let (resolved_count, account_age_days, no_reopen_history, phone_verified) =
+        if let Some(reporter_id) = issue.reporter_id {
+            match state.db.get_reporter_trust_signals(reporter_id).await {
+                Ok(signals) => signals,
+                Err(e) => {
+                    tracing::error!("Failed to load reporter trust signals: {}", e);
+                    (0, 0, false, false)
+                }
+            }
+        } else {
+            (0, 0, false, false)
+        };
+
+    let identity_verified = issue.reporter_id.is_some() || otp_verified || phone_verified;
+    let has_duplicate_signal = issue.duplicate_of.is_some();
+    issue.verification_score = calculate_verification_score(
+        !issue.media_urls.is_empty(),
+        issue
+            .location
+            .address
+            .as_ref()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        identity_verified,
+        account_age_days,
+        resolved_count,
+        no_reopen_history,
+        has_duplicate_signal,
+    );
+    issue.verification_state = verification_state_from_score(issue.verification_score);
+    issue.triage_score = crate::db::Database::calculate_triage_score(
+        &issue.priority,
+        issue.verification_score,
+        issue.corroboration_count,
+        issue.created_at,
+        now,
+    );
+
     match state.db.insert_issue(&issue).await {
-        Ok(_) => (
-            StatusCode::CREATED,
-            Json(json!({
-                "success": true,
-                "data": issue,
-                "message": "Issue reported successfully."
-            })),
-        ),
+        Ok(_) => {
+            if let Some(root_id) = issue.duplicate_of {
+                if let Err(e) = state.db.increment_corroboration_count(root_id).await {
+                    tracing::error!("Failed to increment corroboration count for {}: {}", root_id, e);
+                } else if let Ok(Some(root_issue)) = state.db.get_issue(root_id).await {
+                    let root_has_duplicate_signal = root_issue.corroboration_count > 0
+                        || root_issue.duplicate_of.is_some();
+                    let (root_resolved_count, root_account_age_days, root_no_reopen_history, root_phone_verified) =
+                        if let Some(root_reporter_id) = root_issue.reporter_id {
+                            state
+                                .db
+                                .get_reporter_trust_signals(root_reporter_id)
+                                .await
+                                .unwrap_or((0, 0, false, false))
+                        } else {
+                            (0, 0, false, false)
+                        };
+                    let root_identity_verified = root_issue.reporter_id.is_some() || root_phone_verified;
+                    let root_verification_score = calculate_verification_score(
+                        !root_issue.media_urls.is_empty(),
+                        root_issue
+                            .location
+                            .address
+                            .as_ref()
+                            .map(|value| !value.trim().is_empty())
+                            .unwrap_or(false),
+                        root_identity_verified,
+                        root_account_age_days,
+                        root_resolved_count,
+                        root_no_reopen_history,
+                        root_has_duplicate_signal,
+                    );
+                    let root_verification_state = verification_state_from_score(root_verification_score);
+                    let root_triage_score = crate::db::Database::calculate_triage_score(
+                        &root_issue.priority,
+                        root_verification_score,
+                        root_issue.corroboration_count,
+                        root_issue.created_at,
+                        Utc::now(),
+                    );
+                    if let Err(e) = state
+                        .db
+                        .update_issue_scores(
+                            root_id,
+                            root_verification_score,
+                            root_verification_state,
+                            root_triage_score,
+                        )
+                        .await
+                    {
+                        tracing::error!("Failed to refresh root issue score {}: {}", root_id, e);
+                    }
+                }
+            }
+
+            (
+                StatusCode::CREATED,
+                Json(json!({
+                    "success": true,
+                    "data": issue,
+                    "message": "Issue reported successfully."
+                })),
+            )
+        }
         Err(e) => {
             tracing::error!("Failed to create issue: {}", e);
             (
@@ -445,12 +709,18 @@ mod tests {
                 longitude: 100.5018,
                 address: Some("Main Road".to_string()),
             },
-            media_urls: None,
+            media_urls: Some(vec!["/uploads/test-photo.jpg".to_string()]),
             tags: None,
+            otp_phone: None,
+            otp_token: None,
         };
 
-        let (status, Json(res_val)) =
-            create_issue(State(state.clone()), Json(create_payload)).await;
+        let (status, Json(res_val)) = create_issue(
+            State(state.clone()),
+            axum::http::HeaderMap::new(),
+            Json(create_payload),
+        )
+        .await;
         assert_eq!(status, StatusCode::CREATED);
         assert!(res_val["success"].as_bool().unwrap());
         let created_id_str = res_val["data"]["id"].as_str().unwrap();
@@ -461,6 +731,7 @@ mod tests {
             status: None,
             category: None,
             priority: None,
+            verification_state: None,
             sort: None,
             page: Some(1),
             limit: Some(10),

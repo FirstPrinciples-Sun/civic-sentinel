@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useIssues } from '../hooks/useIssues'
+import type { Issue } from '../services/api'
 import {
   Loader2,
   Search,
@@ -12,25 +14,26 @@ import {
   ChevronRight,
   Info,
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { useI18n } from '../context/LanguageContext'
 
-// Custom marker status colors
+const DEFAULT_CENTER: [number, number] = [13.7563, 100.5018]
+
 const getStatusColor = (status: string) => {
   switch (status.toLowerCase()) {
     case 'reported':
-      return '#f59e0b' // Amber
+      return '#f59e0b'
     case 'underreview':
-      return '#3b82f6' // Blue
+      return '#0ea5e9'
     case 'inprogress':
-      return '#8b5cf6' // Purple
+      return '#38bdf8'
     case 'resolved':
-      return '#10b981' // Green
-    case 'closed':
-      return '#64748b' // Slate
-    case 'escalated':
-      return '#ef4444' // Red
-    default:
       return '#10b981'
+    case 'closed':
+      return '#64748b'
+    case 'escalated':
+      return '#ef4444'
+    default:
+      return '#0ea5e9'
   }
 }
 
@@ -39,9 +42,9 @@ const getStatusBadgeClass = (status: string) => {
     case 'reported':
       return 'text-amber-400 bg-amber-500/10 border-amber-500/20'
     case 'underreview':
-      return 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+      return 'text-sky-400 bg-sky-500/10 border-sky-500/20'
     case 'inprogress':
-      return 'text-purple-400 bg-purple-500/10 border-purple-500/20'
+      return 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'
     case 'resolved':
       return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
     case 'closed':
@@ -64,7 +67,7 @@ const getPriorityBadgeClass = (priority: string) => {
     case 'critical':
       return 'text-red-400 bg-red-500/10 border-red-500/20'
     default:
-      return 'text-slate-400 bg-slate-500/10'
+      return 'text-slate-400 bg-slate-500/10 border-slate-500/20'
   }
 }
 
@@ -86,49 +89,80 @@ const createCustomIcon = (status: string) => {
   })
 }
 
-function MapController({ center }: { center: [number, number] | null }) {
+function MapViewport({
+  filteredIssues,
+  selectedIssue,
+}: {
+  filteredIssues: Issue[]
+  selectedIssue: Issue | null
+}) {
   const map = useMap()
+
   useEffect(() => {
-    if (center) {
-      map.setView(center, 15, { animate: true, duration: 1.5 })
+    if (selectedIssue) {
+      map.setView([selectedIssue.location.latitude, selectedIssue.location.longitude], 15, {
+        animate: true,
+        duration: 1.2,
+      })
+      return
     }
-  }, [center, map])
+
+    if (filteredIssues.length === 0) {
+      map.setView(DEFAULT_CENTER, 12, { animate: true })
+      return
+    }
+
+    const bounds = L.latLngBounds(
+      filteredIssues.map((issue) => [issue.location.latitude, issue.location.longitude]),
+    )
+    map.fitBounds(bounds, {
+      padding: [44, 44],
+      maxZoom: 13,
+      animate: true,
+    })
+  }, [filteredIssues, map, selectedIssue])
+
   return null
 }
 
 export default function MapPage() {
-  const { data: issues, isLoading } = useIssues(1, 100)
-  const [selectedIssue, setSelectedIssue] = useState<any | null>(null)
+  const { t, formatCategory, formatPriority, formatStatus, locale } = useI18n()
+  const { data: issuesResult, isLoading } = useIssues(1, 100)
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
 
-  const center: [number, number] = [13.7563, 100.5018] // Bangkok default
+  const issues = issuesResult?.issues ?? []
 
-  const filteredIssues =
-    issues?.filter((issue) => {
-      const matchesSearch =
-        issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (issue.location.address &&
-          issue.location.address.toLowerCase().includes(searchTerm.toLowerCase()))
-      const matchesStatus =
-        statusFilter === 'all' || issue.status.toLowerCase() === statusFilter.toLowerCase()
-      const matchesCategory =
-        categoryFilter === 'all' || issue.category.toLowerCase() === categoryFilter.toLowerCase()
-      return matchesSearch && matchesStatus && matchesCategory
-    }) ?? []
+  const filteredIssues = issues.filter((issue) => {
+    const matchesSearch =
+      issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (issue.location.address &&
+        issue.location.address.toLowerCase().includes(searchTerm.toLowerCase()))
+    const matchesStatus =
+      statusFilter === 'all' || issue.status.toLowerCase() === statusFilter.toLowerCase()
+    const matchesCategory =
+      categoryFilter === 'all' || issue.category.toLowerCase() === categoryFilter.toLowerCase()
+    return matchesSearch && matchesStatus && matchesCategory
+  })
 
-  const activeCenter: [number, number] | null = selectedIssue
-    ? [selectedIssue.location.latitude, selectedIssue.location.longitude]
-    : null
+  const formatDate = (value: string) => {
+    return new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(value))
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)] relative overflow-hidden bg-slate-950">
-      {/* Map Layer */}
       <MapContainer
-        center={center}
+        center={DEFAULT_CENTER}
         zoom={12}
         className="h-full w-full z-10"
         scrollWheelZoom={true}
@@ -137,7 +171,7 @@ export default function MapPage() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapController center={activeCenter} />
+        <MapViewport filteredIssues={filteredIssues} selectedIssue={selectedIssue} />
 
         {filteredIssues.map((issue) => (
           <Marker
@@ -157,10 +191,10 @@ export default function MapPage() {
                 </h3>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${getStatusBadgeClass(issue.status)}`}>
-                    {issue.status.toUpperCase()}
+                    {formatStatus(issue.status)}
                   </span>
                   <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${getPriorityBadgeClass(issue.priority)}`}>
-                    {issue.priority.toUpperCase()}
+                    {formatPriority(issue.priority)}
                   </span>
                 </div>
                 <p className="text-sm text-slate-600 mb-3 line-clamp-3">
@@ -172,92 +206,99 @@ export default function MapPage() {
                     <span className="truncate">{issue.location.address}</span>
                   </div>
                 )}
+                <div className="mt-2 pt-2 border-t border-slate-200 text-[11px] text-slate-500 space-y-0.5">
+                  <p>{t('map.createdAt')}: {formatDate(issue.created_at)}</p>
+                  <p>{t('map.updatedAt')}: {formatDate(issue.updated_at)}</p>
+                </div>
+                <Link
+                  to={`/issues/${issue.id}`}
+                  className="inline-block mt-2 text-xs text-sky-700 hover:text-sky-800 font-semibold"
+                >
+                  {t('map.viewIssueDetails')}
+                </Link>
               </div>
             </Popup>
           </Marker>
         ))}
       </MapContainer>
 
-      {/* Sidebar Controls overlay */}
       <div
         className={`absolute top-4 left-4 z-[1000] max-h-[calc(100vh-6rem)] w-80 glass-panel flex flex-col pointer-events-auto transition-all duration-300 shadow-2xl overflow-hidden border-slate-700/60 bg-slate-900/85 backdrop-blur-xl ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-[calc(100%+1rem)]'
         }`}
       >
-        {/* Toggle Button */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-10 top-4 w-10 h-10 bg-slate-800 border-r border-y border-slate-700/50 rounded-r-lg flex items-center justify-center shadow-lg text-emerald-400 hover:text-emerald-300 transition-colors pointer-events-auto"
+          className="absolute -right-10 top-4 w-10 h-10 bg-slate-800 border-r border-y border-slate-700/50 rounded-r-lg flex items-center justify-center shadow-lg text-sky-300 hover:text-sky-200 transition-colors pointer-events-auto"
         >
           {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
         </button>
 
         <div className="p-4 border-b border-slate-700/50">
-          <h2 className="text-lg font-bold gradient-text mb-1">Live Issue Map</h2>
-          <p className="text-xs text-slate-400">Filter and track active public issues</p>
+          <h2 className="text-lg font-bold gradient-text mb-1">{t('map.title')}</h2>
+          <p className="text-xs text-slate-400">{t('map.subtitle')}</p>
         </div>
 
-        {/* Filters */}
         <div className="p-4 space-y-3 border-b border-slate-700/50 bg-slate-800/20">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search issues or address..."
+              placeholder={t('map.search')}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-800/80 border border-slate-700/50 rounded-lg text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors text-white"
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-800/80 border border-slate-700/50 rounded-lg text-sm placeholder-slate-500 focus:outline-none focus:border-sky-500/50 transition-colors text-white"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Status</label>
+              <label className="block text-[10px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">{t('map.status')}</label>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-2 py-1.5 bg-slate-800/80 border border-slate-700/50 rounded-lg text-xs focus:outline-none focus:border-emerald-500/50 transition-colors text-white"
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="w-full px-2 py-1.5 bg-slate-800/80 border border-slate-700/50 rounded-lg text-xs focus:outline-none focus:border-sky-500/50 transition-colors text-white"
               >
-                <option value="all">All</option>
-                <option value="reported">Reported</option>
-                <option value="underreview">Reviewing</option>
-                <option value="inprogress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-                <option value="escalated">Escalated</option>
+                <option value="all">{t('map.filter.all')}</option>
+                <option value="reported">{formatStatus('reported')}</option>
+                <option value="underreview">{t('map.filter.reviewing')}</option>
+                <option value="inprogress">{formatStatus('inprogress')}</option>
+                <option value="resolved">{formatStatus('resolved')}</option>
+                <option value="closed">{formatStatus('closed')}</option>
+                <option value="escalated">{formatStatus('escalated')}</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Category</label>
+              <label className="block text-[10px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">{t('map.category')}</label>
               <select
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full px-2 py-1.5 bg-slate-800/80 border border-slate-700/50 rounded-lg text-xs focus:outline-none focus:border-emerald-500/50 transition-colors text-white"
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                className="w-full px-2 py-1.5 bg-slate-800/80 border border-slate-700/50 rounded-lg text-xs focus:outline-none focus:border-sky-500/50 transition-colors text-white"
               >
-                <option value="all">All</option>
-                <option value="infrastructure">Infrastructure</option>
-                <option value="utilities">Utilities</option>
-                <option value="sanitation">Sanitation</option>
-                <option value="safety">Public Safety</option>
-                <option value="environment">Environment</option>
-                <option value="other">Other</option>
+                <option value="all">{t('map.filter.all')}</option>
+                <option value="infrastructure">{formatCategory('infrastructure')}</option>
+                <option value="safety">{formatCategory('safety')}</option>
+                <option value="environment">{formatCategory('environment')}</option>
+                <option value="sanitation">{formatCategory('sanitation')}</option>
+                <option value="transportation">{formatCategory('transportation')}</option>
+                <option value="publicutility">{formatCategory('publicutility')}</option>
+                <option value="other">{formatCategory('other')}</option>
               </select>
             </div>
           </div>
         </div>
 
-        {/* Scrollable list */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 custom-scrollbar">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin text-emerald-400 mb-2" />
-              <span className="text-xs">Loading issues...</span>
+              <Loader2 className="w-8 h-8 animate-spin text-sky-300 mb-2" />
+              <span className="text-xs">{t('map.loading')}</span>
             </div>
           ) : filteredIssues.length === 0 ? (
             <div className="text-center py-12 text-slate-500 px-4">
               <Info className="w-6 h-6 mx-auto mb-2 text-slate-600" />
-              <p className="text-xs">No matching issues found on the map.</p>
+              <p className="text-xs">{t('map.none')}</p>
             </div>
           ) : (
             filteredIssues.map((issue) => (
@@ -266,7 +307,7 @@ export default function MapPage() {
                 onClick={() => setSelectedIssue(issue)}
                 className={`p-3 text-left transition-all duration-150 cursor-pointer ${
                   selectedIssue?.id === issue.id
-                    ? 'bg-emerald-500/10 border-l-2 border-emerald-500'
+                    ? 'bg-sky-500/10 border-l-2 border-sky-500'
                     : 'hover:bg-slate-800/35 border-l-2 border-transparent'
                 }`}
               >
@@ -278,24 +319,30 @@ export default function MapPage() {
                 </p>
                 <div className="flex items-center justify-between">
                   <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${getStatusBadgeClass(issue.status)}`}>
-                    {issue.status.toUpperCase()}
+                    {formatStatus(issue.status)}
                   </span>
                   <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
                     <Calendar className="w-3 h-3" />
-                    {format(new Date(issue.created_at), 'MMM dd')}
+                    {t('map.createdAt')}: {formatDate(issue.created_at)}
                   </span>
                 </div>
+                <Link
+                  to={`/issues/${issue.id}`}
+                  onClick={(event) => event.stopPropagation()}
+                  className="inline-block mt-2 text-[11px] text-sky-300 hover:text-sky-200"
+                >
+                  {t('map.viewDetails')}
+                </Link>
               </div>
             ))
           )}
         </div>
       </div>
 
-      {/* Floating Toggle Button (visible only when sidebar is closed) */}
       {!isSidebarOpen && (
         <button
           onClick={() => setIsSidebarOpen(true)}
-          className="absolute top-4 left-4 z-[1000] w-10 h-10 bg-slate-800/90 border border-slate-700/50 rounded-lg flex items-center justify-center shadow-lg text-emerald-400 hover:text-emerald-300 pointer-events-auto"
+          className="absolute top-4 left-4 z-[1000] w-10 h-10 bg-slate-800/90 border border-slate-700/50 rounded-lg flex items-center justify-center shadow-lg text-sky-300 hover:text-sky-200 pointer-events-auto"
         >
           <ChevronRight className="w-5 h-5" />
         </button>

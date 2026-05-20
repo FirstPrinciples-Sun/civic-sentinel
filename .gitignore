@@ -69,3 +69,8 @@ apps/api/server.err
 apps/api/srv.log
 apps/api/srv.err
 
+# Runtime uploads and temporary artifacts
+apps/api/uploads/
+apps/web/tmp/
+tmp/
+

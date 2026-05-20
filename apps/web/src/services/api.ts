@@ -115,6 +115,11 @@ export interface Issue {
   category: string
   priority: string
   status: string
+  verification_score: number
+  verification_state: 'trusted' | 'needs_review' | 'suspicious'
+  duplicate_of: string | null
+  corroboration_count: number
+  triage_score: number
   location: GeoLocation
   reporter_id: string | null
   assigned_to: string | null
@@ -123,6 +128,25 @@ export interface Issue {
   created_at: string
   updated_at: string
   resolved_at: string | null
+}
+
+export interface IssueComment {
+  id: string
+  issue_id: string
+  author_id: string
+  content: string
+  is_internal: boolean
+  created_at: string
+}
+
+export interface IssueStatusHistoryEntry {
+  id: string
+  issue_id: string
+  old_status: string
+  new_status: string
+  changed_by: string
+  reason: string | null
+  created_at: string
 }
 
 export interface CategoryCount {
@@ -149,12 +173,21 @@ export interface IssuesListMeta {
   total: number
   page: number
   per_page: number
+  total_pages: number
 }
 
 export interface IssuesListResponse {
   success: boolean
   data: Issue[]
   meta: IssuesListMeta
+}
+
+export interface IssueFilters {
+  status?: string
+  category?: string
+  priority?: string
+  verification_state?: 'trusted' | 'needs_review' | 'suspicious'
+  sort?: 'triage' | 'created_at' | 'updated_at' | 'priority'
 }
 
 export interface CreateIssueRequest {
@@ -164,4 +197,20 @@ export interface CreateIssueRequest {
   location: GeoLocation
   media_urls?: string[]
   tags?: string[]
+  otp_phone?: string
+  otp_token?: string
+}
+
+export interface CreateCommentRequest {
+  content: string
+  is_internal?: boolean
+}
+
+export interface UpdateIssueRequest {
+  title?: string
+  description?: string
+  status?: string
+  priority?: string
+  assigned_to?: string | null
+  reason?: string
 }
