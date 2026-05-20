@@ -9,6 +9,7 @@ use axum::{
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 mod config;
@@ -135,6 +136,12 @@ async fn main() {
             state.clone(),
             middleware::rate_limit::rate_limit_middleware,
         ))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
