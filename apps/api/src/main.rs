@@ -3,7 +3,7 @@
 use axum::{
     extract::Json,
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 use serde::Serialize;
@@ -104,35 +104,30 @@ async fn main() {
     };
 
     // Build router
-    let app = Router::new()
+    let public_routes = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/info", get(api_info))
-        // Auth routes (public)
         .route("/api/v1/auth/register", post(routes::auth::register))
         .route("/api/v1/auth/login", post(routes::auth::login))
         .route("/api/v1/auth/refresh", post(routes::auth::refresh))
         .route("/api/v1/auth/logout", post(routes::auth::logout))
-        // Protected routes
-        .route(
-            "/api/v1/issues",
-            get(routes::issues::list_issues).post(routes::issues::create_issue),
-        )
-        .route(
-            "/api/v1/issues/:id",
-            get(routes::issues::get_issue)
-                .patch(routes::issues::update_issue)
-                .delete(routes::issues::delete_issue),
-        )
-        .route(
-            "/api/v1/issues/:id/comments",
-            get(routes::comments::get_comments).post(routes::comments::create_comment),
-        )
-        .route(
-            "/api/v1/issues/:id/history",
-            get(routes::status_history::get_status_history),
-        )
-        // Analytics
-        .route("/api/v1/analytics", get(routes::analytics::get_analytics))
+        .route("/api/v1/issues", get(routes::issues::list_issues))
+        .route("/api/v1/issues/:id", get(routes::issues::get_issue))
+        .route("/api/v1/issues/:id/comments", get(routes::comments::get_comments))
+        .route("/api/v1/issues/:id/history", get(routes::status_history::get_status_history))
+        .route("/api/v1/analytics", get(routes::analytics::get_analytics));
+
+    let protected_routes = Router::new()
+        .route("/api/v1/issues", post(routes::issues::create_issue))
+        .route("/api/v1/issues/:id", patch(routes::issues::update_issue).delete(routes::issues::delete_issue))
+        .route("/api/v1/issues/:id/comments", post(routes::comments::create_comment))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::auth::auth_middleware,
+        ));
+
+    let app = public_routes
+        .merge(protected_routes)
         .layer(axum::middleware::from_fn(
             middleware::security_headers::security_headers_middleware,
         ))
