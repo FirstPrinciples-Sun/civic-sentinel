@@ -82,13 +82,48 @@ impl AppConfig {
         env::var("DATABASE_URL").unwrap_or_else(|_| self.database.url.clone())
     }
 
+    /// Validate JWT secret meets security requirements
+    /// Returns error if secret is insecure
+    pub fn validate_jwt_secret(&self) -> Result<(), String> {
+        let secret = env::var("JWT_SECRET").unwrap_or_else(|_| self.auth.jwt_secret.clone());
+
+        // Check minimum length
+        if secret.len() < 32 {
+            return Err(format!(
+                "JWT_SECRET must be at least 32 characters long (current: {} chars). \
+                 Generate a secure secret with: openssl rand -base64 32",
+                secret.len()
+            ));
+        }
+
+        // Check if it's the default insecure value
+        let insecure_defaults = [
+            "change-me-in-production-32-char-min",
+            "your-secret-key-here-must-be-32-chars",
+            "insecure-jwt-secret-change-me-now-32",
+        ];
+
+        if insecure_defaults.contains(&secret.as_str()) {
+            return Err(
+                "JWT_SECRET is set to a default insecure value. \
+                 Change it immediately! Generate with: openssl rand -base64 32".to_string()
+            );
+        }
+
+        // Warn if secret looks weak (all same character, sequential, etc.)
+        if secret.chars().all(|c| c == secret.chars().next().unwrap()) {
+            return Err(
+                "JWT_SECRET appears to be weak (repeated characters). \
+                 Use a cryptographically random secret: openssl rand -base64 32".to_string()
+            );
+        }
+
+        Ok(())
+    }
+
     /// Get JWT secret (must be set in production)
     pub fn jwt_secret(&self) -> String {
-        let secret = env::var("JWT_SECRET").unwrap_or_else(|_| self.auth.jwt_secret.clone());
-        if secret.len() < 32 {
-            panic!("JWT_SECRET must be at least 32 characters long for security");
-        }
-        secret
+        env::var("JWT_SECRET").unwrap_or_else(|_| self.auth.jwt_secret.clone())
     }
 }
 
@@ -130,5 +165,58 @@ impl Default for AppConfig {
                 webhook_url: None,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jwt_secret_too_short() {
+        let mut config = AppConfig::default();
+        config.auth.jwt_secret = "short".to_string();
+
+        let result = config.validate_jwt_secret();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("at least 32 characters"));
+    }
+
+    #[test]
+    fn test_jwt_secret_default_value() {
+        let mut config = AppConfig::default();
+        config.auth.jwt_secret = "change-me-in-production-32-char-min".to_string();
+
+        let result = config.validate_jwt_secret();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("default insecure value"));
+    }
+
+    #[test]
+    fn test_jwt_secret_weak_repeated_chars() {
+        let mut config = AppConfig::default();
+        config.auth.jwt_secret = "a".repeat(32);
+
+        let result = config.validate_jwt_secret();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("weak"));
+    }
+
+    #[test]
+    fn test_jwt_secret_valid() {
+        let mut config = AppConfig::default();
+        config.auth.jwt_secret = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6".to_string();
+
+        let result = config.validate_jwt_secret();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_jwt_secret_valid_base64() {
+        let mut config = AppConfig::default();
+        config.auth.jwt_secret = "dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2g=".to_string();
+
+        let result = config.validate_jwt_secret();
+        assert!(result.is_ok());
     }
 }

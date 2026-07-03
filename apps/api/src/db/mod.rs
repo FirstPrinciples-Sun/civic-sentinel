@@ -417,22 +417,29 @@ impl Database {
     }
 
     /// List issues with SQL-level filters, sorting, and pagination.
+    /// Uses safe enum-based filtering to prevent SQL injection.
     pub async fn list_issues(
         &self,
         query: &IssueListQuery,
     ) -> Result<(Vec<Issue>, i64), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.client.lock().await;
+
+        // Build WHERE clause - all values are from validated enums, safe from injection
         let mut where_clauses = vec!["deleted_at IS NULL".to_string()];
 
+        // Status filter - only accepts IssueStatus enum values
         if let Some(status) = &query.status {
             where_clauses.push(format!("status = '{}'", status.as_str()));
         }
+        // Category filter - only accepts IssueCategory enum values
         if let Some(category) = &query.category {
             where_clauses.push(format!("category = '{}'", category.as_str()));
         }
+        // Priority filter - only accepts Priority enum values
         if let Some(priority) = &query.priority {
             where_clauses.push(format!("priority = '{}'", priority.as_str()));
         }
+        // Verification state - only accepts VerificationState enum values
         if let Some(verification_state) = &query.verification_state {
             where_clauses.push(format!(
                 "verification_state = '{}'",
@@ -442,6 +449,7 @@ impl Database {
 
         let where_sql = where_clauses.join(" AND ");
 
+        // Sort SQL - using whitelisted values only, no user input
         let sort_sql = match query.sort.as_deref() {
             Some("updated_at") => "updated_at DESC, created_at DESC",
             Some("priority") => {
@@ -472,6 +480,7 @@ impl Database {
         let limit = query.limit.unwrap_or(20).clamp(1, 100) as usize;
         let offset = (page - 1) * limit;
 
+        // Count query
         let count_sql = format!("SELECT COUNT(*) FROM issues WHERE {}", where_sql);
         let mut count_rows = conn.query(count_sql.as_str(), ()).await?;
         let total = if let Some(row) = count_rows.next().await? {
@@ -480,6 +489,7 @@ impl Database {
             0
         };
 
+        // Main query - LIMIT and OFFSET are safe integers
         let sql = format!(
             "SELECT id, title, description, category, priority, status, latitude, longitude, address, reporter_id, assigned_to, media_urls, tags, verification_score, verification_state, duplicate_of, corroboration_count, triage_score, created_at, updated_at, resolved_at, deleted_at
              FROM issues

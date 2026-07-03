@@ -76,15 +76,26 @@ pub async fn rate_limit_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    // Extract client IP from X-Forwarded-For or X-Real-IP headers
     let key = request
         .headers()
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            request
+                .headers()
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+        })
         .unwrap_or("127.0.0.1")
+        .split(',')
+        .next()
+        .unwrap_or("127.0.0.1")
+        .trim()
         .to_string();
-    let limiter = RateLimiter::new(state.config.clone());
 
-    if !limiter.is_allowed(&key).await {
+    // Use the rate limiter from AppState (shared across all requests)
+    if !state.rate_limiter.is_allowed(&key).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 

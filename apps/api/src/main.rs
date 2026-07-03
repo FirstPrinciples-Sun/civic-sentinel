@@ -1,5 +1,5 @@
 use axum::{
-    extract::Json,
+    extract::{DefaultBodyLimit, Json},
     http::StatusCode,
     routing::{get, patch, post},
     Router,
@@ -13,6 +13,10 @@ use axum::http::HeaderValue;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tracing::info;
+
+// Security: Maximum request body size (excluding multipart uploads)
+// Prevents DoS attacks via extremely large JSON payloads
+const MAX_BODY_SIZE: usize = 2 * 1024 * 1024; // 2 MB
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -72,6 +76,15 @@ async fn main() {
         }
     };
 
+    // CRITICAL: Validate JWT secret before starting server
+    if let Err(e) = app_config.validate_jwt_secret() {
+        tracing::error!("SECURITY ERROR: {}", e);
+        tracing::error!("The server will NOT start with an insecure JWT secret.");
+        tracing::error!("Set JWT_SECRET environment variable to a secure random value.");
+        std::process::exit(1);
+    }
+    info!("JWT secret validation passed");
+
     let database = match db::Database::new(&app_config).await {
         Ok(db) => {
             info!("Database connected successfully");
@@ -90,7 +103,8 @@ async fn main() {
 
     let state = AppState {
         db: database,
-        config: app_config,
+        config: app_config.clone(),
+        rate_limiter: middleware::rate_limit::RateLimiter::new(app_config.clone()),
     };
     let uploads_dir = std::env::var("UPLOAD_DIR")
         .map(PathBuf::from)
@@ -108,7 +122,11 @@ async fn main() {
         .route("/api/v1/auth/logout", post(routes::auth::logout))
         .route("/api/v1/auth/otp/request", post(routes::auth::request_phone_otp))
         .route("/api/v1/auth/otp/verify", post(routes::auth::verify_phone_otp))
-        .route("/api/v1/uploads", post(routes::uploads::upload_issue_media))
+        .route(
+            "/api/v1/uploads",
+            post(routes::uploads::upload_issue_media)
+                .layer(DefaultBodyLimit::max(15 * 1024 * 1024)) // 15MB for file uploads
+        )
         .route(
             "/api/v1/issues",
             get(routes::issues::list_issues).post(routes::issues::create_issue),
@@ -123,7 +141,11 @@ async fn main() {
             get(routes::status_history::get_status_history),
         )
         .route("/api/v1/analytics", get(routes::analytics::get_analytics))
-        .nest_service("/uploads", ServeDir::new(uploads_dir.clone()));
+        .nest_service(
+            "/uploads",
+            ServeDir::new(uploads_dir.clone())
+                .append_index_html_on_directories(false) // Don't serve directory listings
+        );
 
     let protected_routes = Router::new()
         .route(
@@ -141,6 +163,7 @@ async fn main() {
 
     let app = public_routes
         .merge(protected_routes)
+        .layer(DefaultBodyLimit::max(MAX_BODY_SIZE)) // Limit request body size (2MB for JSON)
         .layer(axum::middleware::from_fn(
             middleware::security_headers::security_headers_middleware,
         ))
@@ -165,6 +188,17 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], state.config.server.port));
     info!("API server listening on http://{}", addr);
+
+    // Spawn background task to cleanup old rate limiter buckets every 5 minutes
+    let rate_limiter_cleanup = state.rate_limiter.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            rate_limiter_cleanup.cleanup().await;
+            tracing::debug!("Rate limiter cleanup completed");
+        }
+    });
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

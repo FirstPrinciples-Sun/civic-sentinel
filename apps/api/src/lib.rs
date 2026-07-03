@@ -15,4 +15,5 @@ use std::sync::Arc;
 pub struct AppState {
     pub db: db::Database,
     pub config: Arc<config::AppConfig>,
+    pub rate_limiter: middleware::rate_limit::RateLimiter,
 }
